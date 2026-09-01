@@ -1,0 +1,166 @@
+/* ========================================
+   TIER 4 OPTIMIZATION: Extracted CSS
+   File: home.php inline styles
+   Date: August 2026
+   Purpose: Extract inline CSS to external file for better caching and page performance
+   ======================================== */
+
+/* Live pulse dot animation */
+.live-pulse-dot {
+    position: relative;
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.live-pulse-ring {
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #10b981;
+    border-radius: 50%;
+    animation: pulse-ring 1.5s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.4);
+        opacity: 0;
+    }
+}
+
+.live-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: #10b981;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+
+/* Model badge grid */
+.model-badge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    .model-badge-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Model badge item */
+.model-badge-item {
+    position: relative;
+    display: block;
+    opacity: 0;
+    animation: fadeInUp 0.5s ease-out forwards;
+    text-decoration: none;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.model-badge-content {
+    position: relative;
+    padding: 1.25rem;
+    background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.model-badge-item:hover .model-badge-content {
+    border-color: var(--accent, #8b5cf6);
+    background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(139, 92, 246, 0.15);
+}
+
+/* NEW indicator */
+.new-indicator {
+    display: inline-block;
+    padding: 2px 8px;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    animation: pulse-scale 2s ease-in-out infinite;
+}
+
+@keyframes pulse-scale {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.model-time {
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 500;
+}
+
+.model-number {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 0.25rem;
+    letter-spacing: -0.02em;
+}
+
+.model-badge-item:hover .model-number {
+    color: var(--accent, #8b5cf6);
+}
+
+.model-device {
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+/* Glow effect on hover */
+.model-badge-glow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at top left, rgba(139, 92, 246, 0.1) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.model-badge-item:hover .model-badge-glow {
+    opacity: 1;
+}
