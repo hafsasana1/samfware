@@ -3,9 +3,14 @@
 //      $this->uri->segment() → service('request')->getUri()->getSegment()
 $request_obj = service('request');
 
+// ✅ FIX: Load web settings directly if not passed from controller
+if (!isset($web)) {
+    $web = @json_decode(@file_get_contents(RESOURCE_PATH . 'web-setting.info'));
+}
+
 $webLogo = base_url().'resource/thq-logo.jpg';
 $favicon = base_url().'resource/favicon.ico';
-if (isset($web) && file_exists('resource/'.$web->webLogo)) {
+if (isset($web) && file_exists(RESOURCE_PATH . $web->webLogo)) {
     $webLogo = base_url().'resource/'.$web->webLogo;
 }
 $webLogo = $webLogo.'?v='.time();
@@ -17,7 +22,25 @@ $webTitle = $web->webTitle ?? '';
             <div class="col-md-12">
                 <nav class="navbar navbar-expand-lg navbar-light navigation">
                     <a class="navbar-brand" href="<?= base_url() ?>">
-                        <img src="<?= $webLogo ?>" alt="<?= $webTitle ?? 'SamFware Logo' ?>" style="max-width: 300px;" width="300" height="34">
+                        <?php 
+                        // Extract filename from URL (remove query string and base_url)
+                        $logoFile = '';
+                        if (!empty($webLogo)) {
+                            $logoUrl = explode('?', $webLogo)[0]; // Remove ?v=timestamp
+                            $logoFile = str_replace(base_url().'resource/', '', $logoUrl);
+                        }
+                        
+                        // Check if logo file exists
+                        $logoExists = !empty($logoFile) && file_exists(RESOURCE_PATH . $logoFile);
+                        
+                        if ($logoExists): 
+                        ?>
+                            <img src="<?= $webLogo ?>" alt="<?= $webTitle ?? 'SamFware Logo' ?>" loading="lazy" style="max-width: 300px;" width="300" height="34">
+                        <?php else: ?>
+                            <span style="font-size: 24px; font-weight: bold; color: #1FBF8F; font-family: 'Inter', sans-serif;">
+                                <?= $webTitle ?: 'SamFware' ?>
+                            </span>
+                        <?php endif; ?>
                     </a>
                     <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent">
                         <span class="navbar-toggler-icon"></span>

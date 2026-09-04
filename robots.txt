@@ -1,8 +1,3 @@
-# robots.txt for SamFware
-# Updated: 2026-08-28
-# Purpose: Block admin/internal pages, allow public content
-
-# Block all bots from admin and internal areas
 User-agent: *
 Disallow: /app-admin/
 Disallow: /firmware-scraper/
@@ -17,10 +12,4 @@ Allow: /
 Allow: /firmware/
 Allow: /blog/
 Allow: /assets/
-
-# Sitemap location (UPDATE THIS WITH YOUR DOMAIN!)
 Sitemap: https://yoursite.com/sitemaps.xml
-
-# Crawl delay (optional - helps prevent server overload)
-# Uncomment if you experience heavy bot traffic
-# Crawl-delay: 1

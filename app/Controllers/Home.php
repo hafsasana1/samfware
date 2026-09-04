@@ -72,18 +72,28 @@ class Home extends BaseController
                 unset($record->password);
                 session()->set('fw', $record);
 
-                // ✅ SECURITY FIX 1.6: Use secure random token for remember-me instead of MD5
-                $tokenRaw = bin2hex(random_bytes(32));  // 64-char hex string
-                $tokenHash = hash_hmac('sha256', $tokenRaw, config('Encryption')->key);
+                // ✅ REMEMBER ME FEATURE: Only set cookies if user checked the box
+                $rememberMe = $this->request->getPost('remember_me');
                 
-                $this->db->table('fw_users')
-                         ->where('userId', $record->userId)
-                         ->update(['hashToken' => $tokenHash]);
+                if ($rememberMe === '1') {
+                    // ✅ SECURITY FIX 1.6: Use secure random token for remember-me instead of MD5
+                    $tokenRaw = bin2hex(random_bytes(32));  // 64-char hex string
+                    $tokenHash = hash_hmac('sha256', $tokenRaw, config('Encryption')->key);
+                    
+                    $this->db->table('fw_users')
+                             ->where('userId', $record->userId)
+                             ->update(['hashToken' => $tokenHash]);
 
-                // Bug 4 fix: chain cookies onto the redirect response so they are sent together
-                return redirect()->to(base_url(ADMIN_PATH . '/dashboard'))
-                    ->setCookie('rememberme', $tokenRaw, 2592000)
-                    ->setCookie('loginUsername', $record->username, 2592000);
+                    // Bug 4 fix: chain cookies onto the redirect response so they are sent together
+                    return redirect()->to(base_url(ADMIN_PATH . '/dashboard'))
+                        ->setCookie('rememberme', $tokenRaw, 2592000)      // 30 days
+                        ->setCookie('loginUsername', $record->username, 2592000);
+                } else {
+                    // User doesn't want to be remembered — clear any existing cookies
+                    return redirect()->to(base_url(ADMIN_PATH . '/dashboard'))
+                        ->deleteCookie('rememberme')
+                        ->deleteCookie('loginUsername');
+                }
             }
 
             // ✅ SECURITY: Record failed login attempt
@@ -114,7 +124,111 @@ class Home extends BaseController
 
     public function notfound(): string
     {
-        return view('error-404');
+        try {
+            // Layer 1: Try to load custom styled 404 page
+            return view('error-404');
+        } catch (\Throwable $e) {
+            // Layer 2: If custom view fails, load simple version
+            try {
+                return view('error-404-simple');
+            } catch (\Throwable $e2) {
+                // Layer 3: If all fails, return plain HTML fallback
+                return $this->getFallback404();
+            }
+        }
+    }
+
+    /**
+     * Ultimate fallback 404 page (plain HTML, no dependencies)
+     * This ensures users NEVER see the CI4 "Whoops!" error page
+     */
+    private function getFallback404(): string
+    {
+        $baseUrl = base_url();
+        $siteName = 'SamFware';
+        
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Not Found - {$siteName}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container { 
+            text-align: center; 
+            max-width: 600px;
+            background: rgba(255,255,255,0.05);
+            padding: 60px 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { 
+            font-size: 120px; 
+            font-weight: 700; 
+            color: #FF6B35;
+            margin-bottom: 20px;
+            line-height: 1;
+            text-shadow: 0 4px 20px rgba(255,107,53,0.3);
+        }
+        h2 { 
+            font-size: 32px; 
+            margin-bottom: 20px;
+            color: #fff;
+            font-weight: 600;
+        }
+        p { 
+            font-size: 18px; 
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        a { 
+            display: inline-block;
+            background: #FF6B35;
+            color: #fff;
+            padding: 15px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(255,107,53,0.3);
+        }
+        a:hover { 
+            background: #E65A28;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(255,107,53,0.4);
+        }
+        @media (max-width: 600px) {
+            h1 { font-size: 80px; }
+            h2 { font-size: 24px; }
+            p { font-size: 16px; }
+            .container { padding: 40px 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>404</h1>
+        <h2>Page Not Found</h2>
+        <p>Sorry, the page you're looking for doesn't exist or has been moved.<br>Please check the URL or return to the homepage.</p>
+        <a href="{$baseUrl}">Back to Homepage</a>
+    </div>
+</body>
+</html>
+HTML;
     }
 
     public function noRecordFound(): string
@@ -151,10 +265,35 @@ class Home extends BaseController
     public function sitemap(): \CodeIgniter\HTTP\Response
     {
         $urls = [];
+        
+        // ✅ SEO OPTIMIZATION: Homepage - Priority 1.0 (Entry point, brand authority)
         $item = new \stdClass();
-        $item->loc = base_url(); $item->lastmod = date(DATE_ATOM, time());
-        $item->changefreq = 'daily'; $item->priority = '1';
+        $item->loc = base_url(); 
+        $item->lastmod = date(DATE_ATOM, time());
+        $item->changefreq = 'daily'; 
+        $item->priority = '1.0';
         $urls[] = $item;
+        
+        // ✅ SEO BEST PRACTICE: Separated sitemaps for clear hierarchy
+        // CMS pages (static content)
+        $item = new \stdClass();
+        $item->loc = base_url('sitemaps/cms');
+        $urls[] = $item;
+        
+        // Model pages (browsing/navigation)
+        $item = new \stdClass();
+        $item->loc = base_url('sitemaps/models');
+        $urls[] = $item;
+        
+        // CSC pages (filtering)
+        $item = new \stdClass();
+        $item->loc = base_url('sitemaps/csc');
+        $urls[] = $item;
+        
+        // Blog posts - REMOVED (not actively used)
+        // $item = new \stdClass();
+        // $item->loc = base_url('sitemaps/blog');
+        // $urls[] = $item;
 
         // ✅ SECURITY FIX: Only include Active posts in sitemap, exclude Draft/Inactive
         // Performance: Optimized via database index on postStatus, postId
@@ -171,12 +310,16 @@ class Home extends BaseController
                 $gi++;
                 if ($gi == SITEMAP_LIMIT) {
                     $item = new \stdClass();
-                    $item->loc = base_url('sitemaps/sitemappage' . $linkCount);
+                    $item->loc = base_url('sitemaps/firmware' . $linkCount);
                     $urls[] = $item; $gi = 1; $linkCount++;
                 }
             }
         }
-        if ($gi != '1') { $item = new \stdClass(); $item->loc = base_url('sitemaps/sitemappage' . $linkCount); $urls[] = $item; }
+        if ($gi != '1') { 
+            $item = new \stdClass(); 
+            $item->loc = base_url('sitemaps/firmware' . $linkCount); 
+            $urls[] = $item; 
+        }
 
         $xml = new \SimpleXMLElement('<?xml version="1.0" encoding="UTF-8" ?><urlset/>');
         $xml->addAttribute('xmlns', 'http://www.sitemaps.org/schemas/sitemap/0.9');
@@ -185,7 +328,7 @@ class Home extends BaseController
             $child->addChild('loc', $url->loc);
             if (isset($url->lastmod))    $child->addChild('lastmod',    $url->lastmod);
             if (isset($url->changefreq)) $child->addChild('changefreq', $url->changefreq);
-            if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 1));
+            if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 2));
         }
         return $this->response->setContentType('application/xml')->setBody($xml->asXml());
     }
@@ -203,7 +346,9 @@ class Home extends BaseController
                     $item = new \stdClass();
                     $item->loc = base_url('blog/' . $rec->postSlug);
                     $item->lastmod = date(DATE_ATOM, strtotime($rec->modifiedTime) + rand(0, 100));
-                    $item->changefreq = 'monthly'; $item->priority = '0.9';
+                    // ✅ SEO OPTIMIZATION: Blog posts - Priority 0.7 (Content marketing, supporting pages)
+                    $item->changefreq = 'monthly'; 
+                    $item->priority = '0.7';
                     $urls[] = $item;
                 }
             }
@@ -214,15 +359,129 @@ class Home extends BaseController
             $child = $xml->addChild('url'); $child->addChild('loc', $url->loc);
             if (isset($url->lastmod))    $child->addChild('lastmod',    $url->lastmod);
             if (isset($url->changefreq)) $child->addChild('changefreq', $url->changefreq);
-            if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 1));
+            if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 2));
         }
         return $this->response->setContentType('application/xml')->setBody($xml->asXml());
     }
 
-    public function sitemapPage(): \CodeIgniter\HTTP\Response
+    public function sitemapCMS(): \CodeIgniter\HTTP\Response
+    {
+        $urls = [];
+        
+        // ✅ SEO OPTIMIZATION: CMS/Static pages - Priority 0.6 (utility pages)
+        $cmsPages = $this->db->table('fw_cms')
+                             ->select('slugUrl, modifiedTime')
+                             ->where('status', 'Active')
+                             ->where('pageType', '1')
+                             ->orderBy('pageId', 'asc')
+                             ->get()
+                             ->getResult();
+        
+        if (count($cmsPages) > 0) {
+            foreach ($cmsPages as $page) {
+                $item = new \stdClass();
+                $item->loc = base_url($page->slugUrl);
+                $item->lastmod = date(DATE_ATOM, strtotime($page->modifiedTime));
+                $item->changefreq = 'yearly';
+                $item->priority = '0.6';
+                $urls[] = $item;
+            }
+        }
+        
+        $xml = new \SimpleXMLElement('<?xml version="1.0" encoding="UTF-8" ?><urlset/>');
+        $xml->addAttribute('xmlns', 'http://www.sitemaps.org/schemas/sitemap/0.9');
+        foreach ($urls as $url) {
+            $child = $xml->addChild('url');
+            $child->addChild('loc', $url->loc);
+            if (isset($url->lastmod))    $child->addChild('lastmod',    $url->lastmod);
+            if (isset($url->changefreq)) $child->addChild('changefreq', $url->changefreq);
+            if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 2));
+        }
+        return $this->response->setContentType('application/xml')->setBody($xml->asXml());
+    }
+
+    public function sitemapModels(): \CodeIgniter\HTTP\Response
+    {
+        $urls = [];
+        
+        // ✅ SEO OPTIMIZATION: Get all distinct models - Priority 0.85 (browsing pages)
+        $models = $this->db->query("
+            SELECT model, MAX(modifiedTime) as lastMod
+            FROM fw_posts 
+            WHERE postStatus = 'Active' 
+            AND model IS NOT NULL 
+            AND model != ''
+            GROUP BY model
+            ORDER BY model ASC
+        ")->getResult();
+        
+        if (count($models) > 0) {
+            foreach ($models as $modelData) {
+                $item = new \stdClass();
+                $item->loc = base_url('firmware/' . $modelData->model);
+                $item->lastmod = date(DATE_ATOM, strtotime($modelData->lastMod));
+                $item->changefreq = 'weekly';
+                $item->priority = '0.85';
+                $urls[] = $item;
+            }
+        }
+        
+        $xml = new \SimpleXMLElement('<?xml version="1.0" encoding="UTF-8" ?><urlset/>');
+        $xml->addAttribute('xmlns', 'http://www.sitemaps.org/schemas/sitemap/0.9');
+        foreach ($urls as $url) {
+            $child = $xml->addChild('url');
+            $child->addChild('loc', $url->loc);
+            if (isset($url->lastmod))    $child->addChild('lastmod',    $url->lastmod);
+            if (isset($url->changefreq)) $child->addChild('changefreq', $url->changefreq);
+            if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 2));
+        }
+        return $this->response->setContentType('application/xml')->setBody($xml->asXml());
+    }
+
+    public function sitemapCSC(): \CodeIgniter\HTTP\Response
+    {
+        $urls = [];
+        
+        // ✅ SEO OPTIMIZATION: Get all CSC pages - Priority 0.80 (filtering pages)
+        $cscs = $this->db->query("
+            SELECT CONCAT(model, '/', csc) as urlPath, MAX(modifiedTime) as lastMod
+            FROM fw_posts 
+            WHERE postStatus = 'Active' 
+            AND model IS NOT NULL 
+            AND model != ''
+            AND csc IS NOT NULL 
+            AND csc != ''
+            GROUP BY model, csc
+            ORDER BY model ASC, csc ASC
+        ")->getResult();
+        
+        if (count($cscs) > 0) {
+            foreach ($cscs as $cscData) {
+                $item = new \stdClass();
+                $item->loc = base_url('firmware/' . $cscData->urlPath);
+                $item->lastmod = date(DATE_ATOM, strtotime($cscData->lastMod));
+                $item->changefreq = 'monthly';
+                $item->priority = '0.80';
+                $urls[] = $item;
+            }
+        }
+        
+        $xml = new \SimpleXMLElement('<?xml version="1.0" encoding="UTF-8" ?><urlset/>');
+        $xml->addAttribute('xmlns', 'http://www.sitemaps.org/schemas/sitemap/0.9');
+        foreach ($urls as $url) {
+            $child = $xml->addChild('url');
+            $child->addChild('loc', $url->loc);
+            if (isset($url->lastmod))    $child->addChild('lastmod',    $url->lastmod);
+            if (isset($url->changefreq)) $child->addChild('changefreq', $url->changefreq);
+            if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 2));
+        }
+        return $this->response->setContentType('application/xml')->setBody($xml->asXml());
+    }
+
+    public function sitemapFirmware(): \CodeIgniter\HTTP\Response
     {
         $urls = []; $limit = SITEMAP_LIMIT;
-        $page = str_replace(['sitemappage', '.xml'], '', $this->request->getUri()->getSegment(2));
+        $page = str_replace(['firmware', '.xml'], '', $this->request->getUri()->getSegment(2));
         $page = $page - 1; $pageRecord = $page * $limit;
 
         // ✅ SECURITY FIX: Only include Active posts in sitemap, exclude Draft/Inactive
@@ -239,7 +498,11 @@ class Home extends BaseController
                     $item = new \stdClass();
                     $item->loc = postUrl($rec);
                     $item->lastmod = date(DATE_ATOM, strtotime($rec->modifiedTime) + rand(0, 100));
-                    $item->changefreq = 'daily'; $item->priority = '0.9';
+                    // ✅ SEO OPTIMIZATION: Firmware posts - Priority 0.9 (Money pages - downloads happen here)
+                    // changefreq = yearly because firmware files don't change after publishing
+                    // New firmware discovered via lastmod date, not changefreq
+                    $item->changefreq = 'yearly'; 
+                    $item->priority = '0.9';
                     $urls[] = $item;
                 }
             }
@@ -252,7 +515,7 @@ class Home extends BaseController
                 $child = $xml->addChild('url'); $child->addChild('loc', $url->loc);
                 if (isset($url->lastmod))    $child->addChild('lastmod',    $url->lastmod);
                 if (isset($url->changefreq)) $child->addChild('changefreq', $url->changefreq);
-                if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 1));
+                if (isset($url->priority))   $child->addChild('priority',   number_format($url->priority, 2));
                 $alreadyIn[] = $url->loc;
             }
         }

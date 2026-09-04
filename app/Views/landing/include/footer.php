@@ -2,10 +2,15 @@
 $gSitekey    = '6LfFIOggAAAAAG2Rse1QdKSAWH8ibnW2kPEe9x0x';
 $gSiteSecret = '6LfFIOggAAAAANTrZmEG8MiC_cUvZLrkwhV60-xd';
 
+// ✅ FIX: Load web settings directly if not passed from controller
+if (!isset($web)) {
+    $web = @json_decode(@file_get_contents(RESOURCE_PATH . 'web-setting.info'));
+}
+
 // ✅ DYNAMIC LOGO: Load from admin settings (same logic as header)
 if (!isset($webLogo)) {
     $webLogo = base_url().'resource/logo.png';
-    if (isset($web) && !empty($web->webLogo) && file_exists(FCPATH . 'resource/' . $web->webLogo)) {
+    if (isset($web) && !empty($web->webLogo) && file_exists(RESOURCE_PATH . $web->webLogo)) {
         $webLogo = base_url().'resource/'.$web->webLogo;
     }
     $webLogo = $webLogo.'?v='.time();
@@ -32,10 +37,28 @@ if (!isset($webLogo)) {
                     <div class="space-y-4">
                         <!-- Dynamic Logo -->
                         <div class="mb-4">
-                            <img src="<?= $webLogo ?>" 
-                                 alt="<?= esc($web->webTitle ?? 'SamFware') ?>" 
-                                 class="h-10 w-auto"
-                                 loading="lazy">
+                            <?php 
+                            // Extract filename from URL (remove query string and base_url)
+                            $logoFile = '';
+                            if (!empty($webLogo)) {
+                                $logoUrl = explode('?', $webLogo)[0]; // Remove ?v=timestamp
+                                $logoFile = str_replace(base_url().'resource/', '', $logoUrl);
+                            }
+                            
+                            // Check if logo file exists
+                            $logoExists = !empty($logoFile) && file_exists(RESOURCE_PATH . $logoFile);
+                            
+                            if ($logoExists): 
+                            ?>
+                                <img src="<?= $webLogo ?>" 
+                                     alt="<?= esc($web->webTitle ?? 'SamFware') ?>" 
+                                     class="h-10 w-auto"
+                                     loading="lazy">
+                            <?php else: ?>
+                                <span class="text-2xl font-bold text-accent" style="font-family: 'Inter', sans-serif;">
+                                    <?= esc($web->webTitle ?? 'SamFware') ?>
+                                </span>
+                            <?php endif; ?>
                         </div>
                         
                         <!-- Condensed Professional Text (No Heading) -->

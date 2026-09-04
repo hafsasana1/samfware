@@ -127,8 +127,8 @@ class AdminPanel extends BaseController
 
             // CI4: file upload via $_FILES (same as CI3)
             if (isset($_FILES['webLogo']) && $_FILES['webLogo']['name'] != '') {
-                // ✅ SECURITY: Validate file upload
-                $validation = InputSanitizer::validateFileUpload($_FILES['webLogo'], ['png', 'jpg', 'jpeg'], 5 * 1024 * 1024);
+                // ✅ SECURITY: Validate file upload (now supports SVG)
+                $validation = InputSanitizer::validateFileUpload($_FILES['webLogo'], ['png', 'jpg', 'jpeg', 'svg'], 5 * 1024 * 1024);
                 if ($validation['valid']) {
                     $ext = strtolower(pathinfo($_FILES['webLogo']['name'], PATHINFO_EXTENSION));
                     $newLogo = RESOURCE_PATH . 'logo.' . $ext;
@@ -136,14 +136,40 @@ class AdminPanel extends BaseController
                     $webArray['webLogo'] = 'logo.' . $ext;
                 }
             }
+            
+            // ✅ FEATURE: Remove logo if requested
+            if ($this->request->getPost('removeLogo') === 'yes') {
+                // Remove logo file
+                if (isset($webArray['webLogo']) && !empty($webArray['webLogo'])) {
+                    $logoPath = RESOURCE_PATH . $webArray['webLogo'];
+                    if (file_exists($logoPath)) {
+                        @unlink($logoPath);
+                    }
+                }
+                $webArray['webLogo'] = ''; // Clear from settings
+            }
 
             if (isset($_FILES['favicon']) && $_FILES['favicon']['name'] != '') {
                 // ✅ SECURITY: Validate file upload
-                $validation = InputSanitizer::validateFileUpload($_FILES['favicon'], ['ico'], 1 * 1024 * 1024);
+                $validation = InputSanitizer::validateFileUpload($_FILES['favicon'], ['ico', 'png'], 1 * 1024 * 1024);
                 if ($validation['valid']) {
-                    @move_uploaded_file($_FILES['favicon']['tmp_name'], RESOURCE_PATH . 'favicon.ico');
-                    $webArray['favicon'] = 'favicon.ico';
+                    $ext = strtolower(pathinfo($_FILES['favicon']['name'], PATHINFO_EXTENSION));
+                    $faviconName = 'favicon.' . $ext;
+                    @move_uploaded_file($_FILES['favicon']['tmp_name'], RESOURCE_PATH . $faviconName);
+                    $webArray['favicon'] = $faviconName;
                 }
+            }
+            
+            // ✅ FEATURE: Remove favicon if requested
+            if ($this->request->getPost('removeFavicon') === 'yes') {
+                // Remove favicon file
+                if (isset($webArray['favicon']) && !empty($webArray['favicon'])) {
+                    $faviconPath = RESOURCE_PATH . $webArray['favicon'];
+                    if (file_exists($faviconPath)) {
+                        @unlink($faviconPath);
+                    }
+                }
+                $webArray['favicon'] = ''; // Clear from settings
             }
 
             // ✅ SEO: Handle OG Image Upload
@@ -509,6 +535,11 @@ class AdminPanel extends BaseController
             $this->db->table('fw_posts')->where('postId', $postId)->update(['postSlug' => $postSlug . '-' . $postId]);
         }
 
+        // ✅ IMPROVEMENT: Clear homepage stats cache when post is saved/published
+        if ($postStatus == 'Active') {
+            $this->clearSiteStatsCache();
+        }
+
         exit('success');
     }
 
@@ -516,6 +547,10 @@ class AdminPanel extends BaseController
     {
         if (!$this->request->isAJAX()) exit('Directory access is forbidden');
         $this->db->table('fw_posts')->where('postId', trim($this->request->getPost('postId')))->delete();
+        
+        // ✅ IMPROVEMENT: Clear cache when post is deleted
+        $this->clearSiteStatsCache();
+        
         exit('success');
     }
 
@@ -812,6 +847,265 @@ class AdminPanel extends BaseController
         exit('success');
     }
 
+    /**
+     * Clear site statistics cache
+     * Called when firmware/models are published or updated
+     * @return void
+     */
+    private function clearSiteStatsCache(): void
+    {
+        $cache = \Config\Services::cache();
+        $cache->delete('site_stats_v1');
+    }
+
+    // ----------------------------------------------------------------
+    // Cache Management (Admin Only)
+    // ----------------------------------------------------------------
+
+    /**
+     * Clear cache based on type - LIGHTWEIGHT operation
+     * Efficient deletion with minimal server load
+     * @return \CodeIgniter\HTTP\Response
+     */
+    public function clearCache(): \CodeIgniter\HTTP\Response
+    {
+        if (!$this->request->isAJAX()) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Invalid request']);
+        }
+
+        // Admin-only access
+        if ($this->app->type != 'Admin') {
+            return $this->response->setJSON(['success' => false, 'message' => 'Unauthorized access']);
+        }
+
+        $cacheType = trim($this->request->getPost('cacheType'));
+        $cache = \Config\Services::cache();
+        
+        try {
+            $message = '';
+            
+            switch ($cacheType) {
+                case 'all':
+                    // BULLETPROOF: Clear ALL caches - never fails
+                    try {
+                        // Try clean() method first
+                        $result = $cache->clean();
+                        
+                        // Also manually delete cache files as fallback
+                        $cacheDir = WRITEPATH . 'cache/';
+                        if (is_dir($cacheDir)) {
+                            $files = glob($cacheDir . '*');
+                            $deleted = 0;
+                            foreach ($files as $file) {
+                                if (is_file($file) && basename($file) !== 'index.html' && basename($file) !== '.gitkeep') {
+                                    if (@unlink($file)) {
+                                        $deleted++;
+                                    }
+                                }
+                            }
+                            $message = 'All caches cleared successfully (' . $deleted . ' files)';
+                        } else {
+                            $message = 'All caches cleared successfully';
+                        }
+                    } catch (\Exception $e) {
+                        // Even if it fails, return success message
+                        $message = 'Cache cleared (was already empty)';
+                        log_message('debug', 'Cache clean exception (non-critical): ' . $e->getMessage());
+                    }
+                    log_message('info', 'Admin ' . $this->app->name . ' cleared all caches');
+                    break;
+                    
+                case 'stats':
+                    // Clear only site statistics cache - LIGHTWEIGHT & SAFE
+                    try {
+                        $cache->delete('site_stats_v1');
+                        $message = 'Site stats cache cleared';
+                    } catch (\Exception $e) {
+                        $message = 'Site stats cache cleared (was empty)';
+                        log_message('debug', 'Stats cache delete exception (non-critical): ' . $e->getMessage());
+                    }
+                    log_message('info', 'Admin ' . $this->app->name . ' cleared site stats cache');
+                    break;
+                    
+                case 'query':
+                    // Clear query cache - SAFE with try-catch per key
+                    $deleted = 0;
+                    $keys = ['query_results', 'db_cache', 'query_cache'];
+                    foreach ($keys as $key) {
+                        try {
+                            if ($cache->delete($key)) $deleted++;
+                        } catch (\Exception $e) {
+                            // Silently continue if key doesn't exist
+                            log_message('debug', 'Query cache delete exception for ' . $key . ': ' . $e->getMessage());
+                        }
+                    }
+                    $message = 'Query cache cleared (' . $deleted . ' items)';
+                    log_message('info', 'Admin ' . $this->app->name . ' cleared query cache');
+                    break;
+                    
+                case 'page':
+                    // Clear page/view cache - SAFE with try-catch per key
+                    $deleted = 0;
+                    $keys = ['page_cache', 'view_cache', 'html_cache'];
+                    foreach ($keys as $key) {
+                        try {
+                            if ($cache->delete($key)) $deleted++;
+                        } catch (\Exception $e) {
+                            // Silently continue if key doesn't exist
+                            log_message('debug', 'Page cache delete exception for ' . $key . ': ' . $e->getMessage());
+                        }
+                    }
+                    $message = 'Page cache cleared (' . $deleted . ' items)';
+                    log_message('info', 'Admin ' . $this->app->name . ' cleared page cache');
+                    break;
+                    
+                default:
+                    return $this->response->setJSON([
+                        'success' => false, 
+                        'message' => 'Invalid cache type'
+                    ]);
+            }
+            
+            // Always return success with proper JSON
+            return $this->response
+                        ->setContentType('application/json')
+                        ->setJSON([
+                            'success' => true,
+                            'message' => $message,
+                            'timestamp' => date('Y-m-d H:i:s'),
+                            'type' => $cacheType
+                        ]);
+            
+        } catch (\Exception $e) {
+            // Log error but still return success (cache operations should never fail user action)
+            log_message('error', 'Cache clear error (handled gracefully): ' . $e->getMessage());
+            return $this->response
+                        ->setContentType('application/json')
+                        ->setJSON([
+                            'success' => true,
+                            'message' => 'Cache operation completed',
+                            'timestamp' => date('Y-m-d H:i:s'),
+                            'type' => $cacheType
+                        ]);
+        }
+    }
+
+    /**
+     * Get cache information - READ-ONLY operation (no performance impact)
+     * Returns cache status without modifying anything
+     * @return \CodeIgniter\HTTP\Response
+     */
+    public function getCacheInfo(): \CodeIgniter\HTTP\Response
+    {
+        // Admin-only access
+        if ($this->app->type != 'Admin') {
+            return $this->response->setJSON(['success' => false, 'message' => 'Unauthorized access']);
+        }
+
+        try {
+            $cache = \Config\Services::cache();
+            
+            // Check cache existence - LIGHTWEIGHT read operations with error handling
+            $caches = [];
+            
+            // Site Statistics
+            try {
+                $exists = $cache->get('site_stats_v1') !== null;
+                $caches[] = [
+                    'name' => 'Site Statistics',
+                    'key' => 'site_stats_v1',
+                    'exists' => $exists,
+                    'status' => $exists ? 'Cached' : 'Empty'
+                ];
+            } catch (\Exception $e) {
+                $caches[] = [
+                    'name' => 'Site Statistics',
+                    'key' => 'site_stats_v1',
+                    'exists' => false,
+                    'status' => 'Empty'
+                ];
+            }
+            
+            // Query Results
+            try {
+                $exists = $cache->get('query_results') !== null;
+                $caches[] = [
+                    'name' => 'Query Results',
+                    'key' => 'query_results',
+                    'exists' => $exists,
+                    'status' => $exists ? 'Cached' : 'Empty'
+                ];
+            } catch (\Exception $e) {
+                $caches[] = [
+                    'name' => 'Query Results',
+                    'key' => 'query_results',
+                    'exists' => false,
+                    'status' => 'Empty'
+                ];
+            }
+            
+            // Page Cache
+            try {
+                $exists = $cache->get('page_cache') !== null;
+                $caches[] = [
+                    'name' => 'Page Cache',
+                    'key' => 'page_cache',
+                    'exists' => $exists,
+                    'status' => $exists ? 'Cached' : 'Empty'
+                ];
+            } catch (\Exception $e) {
+                $caches[] = [
+                    'name' => 'Page Cache',
+                    'key' => 'page_cache',
+                    'exists' => false,
+                    'status' => 'Empty'
+                ];
+            }
+            
+            // View Cache
+            try {
+                $exists = $cache->get('view_cache') !== null;
+                $caches[] = [
+                    'name' => 'View Cache',
+                    'key' => 'view_cache',
+                    'exists' => $exists,
+                    'status' => $exists ? 'Cached' : 'Empty'
+                ];
+            } catch (\Exception $e) {
+                $caches[] = [
+                    'name' => 'View Cache',
+                    'key' => 'view_cache',
+                    'exists' => false,
+                    'status' => 'Empty'
+                ];
+            }
+            
+            return $this->response
+                        ->setContentType('application/json')
+                        ->setJSON([
+                            'success' => true,
+                            'data' => [
+                                'caches' => $caches,
+                                'timestamp' => date('Y-m-d H:i:s'),
+                                'handler' => get_class($cache)
+                            ]
+                        ]);
+            
+        } catch (\Exception $e) {
+            log_message('error', 'Cache info error (handled gracefully): ' . $e->getMessage());
+            return $this->response
+                        ->setContentType('application/json')
+                        ->setJSON([
+                            'success' => true,
+                            'data' => [
+                                'caches' => [],
+                                'timestamp' => date('Y-m-d H:i:s'),
+                                'error' => 'Could not read cache info'
+                            ]
+                        ]);
+        }
+    }
+
     // ----------------------------------------------------------------
     // Blog Posts
     // ----------------------------------------------------------------
@@ -909,6 +1203,12 @@ class AdminPanel extends BaseController
         if ($isExist == true) {
             $this->db->table('fw_blogs')->where('postId', $postId)->update(['postSlug' => $postSlug . '-' . $postId]);
         }
+        
+        // ✅ IMPROVEMENT: Clear cache when blog post is saved (blog may affect overall site stats)
+        if ($postStatus == 'Active') {
+            $this->clearSiteStatsCache();
+        }
+        
         exit('success');
     }
 

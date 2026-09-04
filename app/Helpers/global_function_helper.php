@@ -437,8 +437,14 @@ if (!function_exists('recentPosts')) {
     function recentPosts($limit = 10, $postId = '') {
         $db      = db_connect();
         $builder = $db->table('fw_posts');
+        
+        // ✅ SECURITY: Only show Active (published) posts to public
+        $builder->where('postStatus', 'Active');
+        
         if ($postId != '') $builder->where('postId !=', $postId);
-        return $builder->orderBy('modifiedTime', 'desc')->limit($limit)->get()->getResult();
+        
+        // ✅ SEO: Order by publishedAt (when post went live) for accurate "Recently Added"
+        return $builder->orderBy('publishedAt', 'desc')->limit($limit)->get()->getResult();
     }
 }
 
@@ -446,10 +452,11 @@ if (!function_exists('recentModels')) {
     function recentModels($limit = 5) {
         $db = db_connect();
         return $db->table('fw_posts')
+                  ->where('postStatus', 'Active')  // ✅ SECURITY: Only show published posts
                   ->where('model !=', '')
                   ->where('isRecentModel', 'Yes')
                   ->groupBy('model')
-                  ->orderBy('modifiedTime', 'desc')
+                  ->orderBy('publishedAt', 'desc')  // ✅ SEO: Order by publish date
                   ->limit($limit)
                   ->get()->getResult();
     }

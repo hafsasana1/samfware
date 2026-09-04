@@ -23,3 +23,14 @@ Thumbs.db
 *.tmp
 *.bak
 *.log
+
+# Development tools (exclude from deployment)
+create_favicon_logo.html
+
+# Keep these in version control (needed for deployment)
+!public/favicon.ico
+!public/resource/favicon.ico
+!public/resource/logo.png
+!public/resource/logo.svg
+!public/assets/favicon.svg
+!public/assets/logo.svg

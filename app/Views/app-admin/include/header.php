@@ -24,6 +24,7 @@ $favicon = $favicon . '?v=' . time();
         <title><?= $webtrAsc->webTitle ?? 'Admin' ?></title>
         <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
         <meta name="theme-color" content="#1FBF8F">
+        <meta name="<?= csrf_token() ?>" content="<?= csrf_hash() ?>">
         <link rel="shortcut icon" href="<?= $favicon ?>">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -91,6 +92,67 @@ $favicon = $favicon . '?v=' . time();
                         <i x-show="!darkMode" x-cloak class="fas fa-moon text-gray-600 dark:text-gray-300"></i>
                         <i x-show="darkMode" x-cloak class="fas fa-sun text-yellow-500"></i>
                     </button>
+
+                    <!-- Cache Management Dropdown (Admin Only) -->
+                    <?php if ($app->type == 'Admin'): ?>
+                    <div x-data="{ cacheOpen: false }" class="relative">
+                        <button @click="cacheOpen = !cacheOpen" 
+                                class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent-soft dark:hover:bg-accent/20 text-gray-700 dark:text-gray-300 hover:text-accent transition-colors"
+                                title="Cache Management">
+                            <i class="fas fa-bolt text-sm"></i>
+                            <span class="text-sm font-medium hidden lg:inline">Cache</span>
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </button>
+                        
+                        <!-- Cache Dropdown Menu -->
+                        <div x-show="cacheOpen" 
+                             @click.away="cacheOpen = false"
+                             x-cloak
+                             x-transition:enter="transition ease-out duration-200"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             x-transition:leave="transition ease-in duration-150"
+                             x-transition:leave-start="opacity-100 scale-100"
+                             x-transition:leave-end="opacity-0 scale-95"
+                             class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden z-50">
+                            
+                            <!-- Cache Options -->
+                            <div class="py-1">
+                                <button onclick="clearCache('all')" 
+                                        class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left">
+                                    <i class="fas fa-sync-alt w-4 text-center text-accent"></i>
+                                    <span>Clear All Cache</span>
+                                </button>
+                                
+                                <button onclick="clearCache('stats')" 
+                                        class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left">
+                                    <i class="fas fa-chart-bar w-4 text-center text-cyan-500"></i>
+                                    <span>Clear Site Stats</span>
+                                </button>
+                                
+                                <button onclick="clearCache('query')" 
+                                        class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left">
+                                    <i class="fas fa-database w-4 text-center text-green-500"></i>
+                                    <span>Clear Query Cache</span>
+                                </button>
+                                
+                                <button onclick="clearCache('page')" 
+                                        class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left">
+                                    <i class="fas fa-file-alt w-4 text-center text-blue-500"></i>
+                                    <span>Clear Page Cache</span>
+                                </button>
+                                
+                                <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                                
+                                <button onclick="viewCacheInfo()" 
+                                        class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left">
+                                    <i class="fas fa-info-circle w-4 text-center text-gray-500"></i>
+                                    <span>View Cache Info</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
 
                     <!-- Website Link -->
                     <a href="<?= base_url() ?>" target="_blank" 
@@ -197,3 +259,101 @@ $favicon = $favicon . '?v=' . time();
                 </div>
             </div>
         </header>
+
+
+<!-- Cache Management JavaScript -->
+<script>
+// Lightweight cache clearing function with minimal server load
+function clearCache(type) {
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    
+    // Disable button and show loading state
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin w-4 text-center"></i><span>Clearing...</span>';
+    
+    // AJAX call with minimal payload (CSRF exempted for this route)
+    $.ajax({
+        url: '<?= base_url("app-admin/clearCache") ?>',
+        type: 'POST',
+        data: { 
+            cacheType: type
+        },
+        dataType: 'json',
+        timeout: 5000, // 5 second timeout - lightweight operation
+        success: function(response) {
+            if (response.success) {
+                // Success - show green checkmark briefly
+                btn.innerHTML = '<i class="fas fa-check w-4 text-center text-green-500"></i><span class="text-green-500">Cleared!</span>';
+                toastr.success(response.message, '', { timeOut: 3000, positionClass: 'toast-top-right' });
+                
+                // Restore button after 2 seconds
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                }, 2000);
+            } else {
+                // Error
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+                toastr.error(response.message || 'Failed to clear cache', '', { timeOut: 3000 });
+            }
+        },
+        error: function(xhr, status, error) {
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+            toastr.error('Error clearing cache', '', { timeOut: 3000 });
+        }
+    });
+}
+
+// View cache info (read-only, no performance impact)
+function viewCacheInfo() {
+    $.ajax({
+        url: '<?= base_url("app-admin/getCacheInfo") ?>',
+        type: 'GET',
+        dataType: 'json',
+        timeout: 3000, // Quick read operation
+        success: function(response) {
+            if (response.success) {
+                // Build info HTML
+                let infoHTML = '<div class="space-y-3">';
+                
+                if (response.data && response.data.caches) {
+                    response.data.caches.forEach(cache => {
+                        const statusColor = cache.exists ? 'text-green-600' : 'text-gray-400';
+                        const statusIcon = cache.exists ? 'fa-check-circle' : 'fa-times-circle';
+                        infoHTML += `
+                            <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-700">
+                                <div class="flex items-center gap-2">
+                                    <i class="fas ${statusIcon} ${statusColor}"></i>
+                                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${cache.name}</span>
+                                </div>
+                                <span class="text-xs text-gray-500">${cache.status}</span>
+                            </div>
+                        `;
+                    });
+                }
+                
+                infoHTML += '</div>';
+                infoHTML += '<div class="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500">';
+                infoHTML += 'Last checked: ' + (response.data.timestamp || 'Now');
+                infoHTML += '</div>';
+                
+                // Show in SweetAlert
+                swal({
+                    title: "Cache Status",
+                    text: infoHTML,
+                    html: true,
+                    type: "info"
+                });
+            } else {
+                toastr.error('Failed to load cache info', '', { timeOut: 3000 });
+            }
+        },
+        error: function() {
+            toastr.error('Error loading cache info', '', { timeOut: 3000 });
+        }
+    });
+}
+</script>

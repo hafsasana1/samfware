@@ -111,10 +111,45 @@ class Filters extends BaseFilters
      * @var array<string, array<string, list<string>>>
      */
     public array $filters = [
-        // ✅ SECURITY: Apply CSRF protection to admin panel only
+        // ✅ SECURITY: Apply CSRF protection to admin panel (except cache management)
         'csrf' => [
             'before' => [
-                'app-admin/*',
+                'app-admin/login',
+                'app-admin/logout',
+                'app-admin/dashboard',
+                'app-admin/dashboardStates',
+                'app-admin/loadPostAutomationTable',
+                'app-admin/savePage',
+                'app-admin/deletePage',
+                'app-admin/savePost',
+                'app-admin/deletePost',
+                'app-admin/saveBlogPost',
+                'app-admin/deleteBlogPost',
+                'app-admin/approveComment',
+                'app-admin/postComment',
+                'app-admin/deleteComment',
+                'app-admin/deleteContactUS',
+                'app-admin/saveAutoPost',
+                'app-admin/saveDownloadableLink',
+                'app-admin/deleteAutoPost',
+                'app-admin/updateAutoPost',
+                'app-admin/refreshFailedPost',
+                'app-admin/saveCountry',
+                'app-admin/deleteCountry',
+                'app-admin/saveCSC',
+                'app-admin/deleteCSC',
+                'app-admin/settings/*',
+                'app-admin/profile',
+                'app-admin/cms',
+                'app-admin/cms/*',
+                'app-admin/posts',
+                'app-admin/posts/*',
+                'app-admin/blog',
+                'app-admin/blog/*',
+                'app-admin/comments',
+                'app-admin/comments/*',
+                'app-admin/contact-us',
+                'app-admin/contact-us/*',
             ]
         ],
         

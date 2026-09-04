@@ -1,8 +1,5 @@
 Options -Indexes
 
-# ✅ PRODUCTION VERSION - For domain root (not subfolder)
-# Use this .htaccess when deploying to: https://samfware.com/
-
 # ✅ TIER 2.5: Gzip Compression for faster delivery
 <IfModule mod_deflate.c>
     AddOutputFilterByType DEFLATE text/plain
@@ -72,18 +69,17 @@ Options -Indexes
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    # ⚠️ CHANGE FOR PRODUCTION: Use / instead of /sampro/
-    RewriteBase /
+    RewriteBase /sampro/
 
     # If the requested file/folder exists directly, serve it as-is
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Transparently map /assets/* -> /public/assets/*
+    # Transparently map /sampro/assets/* -> /sampro/public/assets/*
     RewriteRule ^(assets/.*)$ public/$1 [L,QSA]
 
-    # Transparently map /resource/* -> /public/resource/*
+    # Transparently map /sampro/resource/* -> /sampro/public/resource/*
     RewriteRule ^(resource/.*)$ public/$1 [L,QSA]
 
     # Route all other requests through CI4 front controller
@@ -91,11 +87,5 @@ Options -Indexes
 </IfModule>
 
 <IfModule !mod_rewrite.c>
-    ErrorDocument 404 index.php
+    ErrorDocument 404 /sampro/index.php
 </IfModule>
-
-# ✅ Force HTTPS (uncomment after SSL is active)
-# <IfModule mod_rewrite.c>
-#     RewriteCond %{HTTPS} off
-#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-# </IfModule>

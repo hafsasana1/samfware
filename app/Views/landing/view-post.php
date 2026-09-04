@@ -187,8 +187,8 @@ $modifiedDate = $post->modifiedTime ?? $publishDate;
     {
       "@context": "https://schema.org",
       "@type": "TechArticle",
-      "headline": "<?= htmlspecialchars($postTitle, ENT_QUOTES) ?>",
-      "description": "<?= htmlspecialchars(replacePostToken($post->metaDesription, $post), ENT_QUOTES) ?>",
+      "headline": "<?= htmlspecialchars($meta_title ?? $postTitle, ENT_QUOTES) ?>",
+      "description": "<?= htmlspecialchars($meta_description ?? replacePostToken($post->metaDesription, $post), ENT_QUOTES) ?>",
       "image": "<?= base_url('resource/logo.png') ?>",
       "author": {
         "@type": "Organization",
@@ -214,7 +214,6 @@ $modifiedDate = $post->modifiedTime ?? $publishDate;
         "description": "Official firmware for Samsung <?= $post->device ?> model <?= $post->model ?>"
       },
       "articleSection": "Firmware Downloads",
-      "articleBody": "Official Samsung firmware download for <?= $post->device ?> (<?= $post->model ?>) with CSC code <?= $post->csc ?>. This firmware version <?= $post->version ?> is compatible with Android <?= $post->os ?> and has a file size of <?= $post->fileSize ?>. Build date: <?= $post->buildDate ?>.",
       "aggregateRating": {
         "@type": "AggregateRating",
         "ratingValue": "4.5",

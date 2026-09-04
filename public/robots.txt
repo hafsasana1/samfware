@@ -1,0 +1,61 @@
+# SamFware - Robots.txt
+# Updated: 2026-09-03
+
+# Allow all search engines
+User-agent: *
+Allow: /
+
+# Block admin area from indexing
+Disallow: /app-admin/
+Disallow: /writable/
+Disallow: /system/
+Disallow: /vendor/
+
+# Block AJAX endpoints (no value for search engines)
+Disallow: */ajax*
+Disallow: */load/*
+
+# Block paginated and filtered URLs (prevent duplicate content)
+Disallow: *?record=*
+Disallow: *?page=*
+Disallow: *?bit=*
+Disallow: *?os=*
+Disallow: *?csc=*
+
+# Block search results page
+Disallow: */search*
+
+# Allow important resources
+Allow: /assets/
+Allow: /resource/
+Allow: /*.css$
+Allow: /*.js$
+
+# XML Sitemap location
+Sitemap: http://localhost/sampro/sitemaps.xml
+
+# Special rules for AI crawlers
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+# Aggressive crawlers - slow down
+User-agent: Bytespider
+Crawl-delay: 10
+
+User-agent: AhrefsBot
+Crawl-delay: 5
+
+User-agent: SemrushBot
+Crawl-delay: 5

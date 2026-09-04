@@ -71,6 +71,12 @@ $routes->post('app-admin/deleteCSC',            'AdminPanel::deleteCSC');
 $routes->get('app-admin/getPosts',              'AdminPanel::getPosts');
 
 // ------------------------------------------------------------
+// Admin — cache management (Admin only)
+// ------------------------------------------------------------
+$routes->post('app-admin/clearCache',           'AdminPanel::clearCache');
+$routes->get('app-admin/getCacheInfo',          'AdminPanel::getCacheInfo');
+
+// ------------------------------------------------------------
 // Admin — settings
 // ------------------------------------------------------------
 $routes->get('app-admin/settings/web',         'AdminPanel::web');
@@ -138,10 +144,15 @@ $routes->get('app-admin/contact-us/(:num)', 'AdminPanel::viewSingleContactUS/$1'
 // ------------------------------------------------------------
 // Sitemaps
 // ------------------------------------------------------------
-$routes->get('sitemaps',        'Home::sitemap');
-$routes->get('sitemaps.xml',    'Home::sitemap');
-$routes->get('sitemaps/blog',   'Home::sitemapBlog');
-$routes->get('sitemaps/(:any)', 'Home::sitemapPage/$1');
+$routes->get('sitemaps',         'Home::sitemap');
+$routes->get('sitemaps.xml',     'Home::sitemap');
+$routes->get('sitemaps/cms',     'Home::sitemapCMS');
+$routes->get('sitemaps/models',  'Home::sitemapModels');
+$routes->get('sitemaps/csc',     'Home::sitemapCSC');
+$routes->get('sitemaps/blog',    'Home::sitemapBlog');
+$routes->get('sitemaps/firmware(:num)', 'Home::sitemapFirmware/$1');
+// Legacy support for old sitemap URLs
+$routes->get('sitemaps/sitemappage(:num)', 'Home::sitemapFirmware/$1');
 
 // ------------------------------------------------------------
 // Public — search / utility

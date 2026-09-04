@@ -5,11 +5,16 @@ $profileImage = base_url().'resource/avatar.png';
 $webLogo = base_url().'resource/logo.png';
 $favicon = base_url().'resource/favicon.ico';
 
+// ✅ FIX: Load web settings directly if not passed from controller
+if (!isset($web)) {
+    $web = @json_decode(@file_get_contents(RESOURCE_PATH . 'web-setting.info'));
+}
+
 // Load from database settings
-if (isset($web) && !empty($web->webLogo) && file_exists(FCPATH . 'resource/' . $web->webLogo)) {
+if (isset($web) && !empty($web->webLogo) && file_exists(RESOURCE_PATH . $web->webLogo)) {
     $webLogo = base_url().'resource/'.$web->webLogo;
 }
-if (isset($web) && !empty($web->favicon) && file_exists(FCPATH . 'resource/' . $web->favicon)) {
+if (isset($web) && !empty($web->favicon) && file_exists(RESOURCE_PATH . $web->favicon)) {
     $favicon = base_url().'resource/'.$web->favicon;
 }
 $webLogo = $webLogo.'?v='.time();
@@ -41,21 +46,29 @@ $gSitekey = '6LfFIOggAAAAAG2Rse1QdKSAWH8ibnW2kPEe9x0x';
         <meta charset="utf-8">
         <title><?= $webTitle ?></title>
         <meta name="description" content="<?= $metaDesription ?>">
+        <!-- ============================================ -->
+        <!-- OPENGRAPH META TAGS (Facebook, LinkedIn)     -->
+        <!-- ============================================ -->
         <meta property="og:type" content="website" />
         <meta property="og:title" content="<?= $metaTitle ?>" />
         <meta property="og:site_name" content="<?= $web->webTitle ?? '' ?>" />
         <meta property="og:description" content="<?= $metaDesription ?>" />
         <meta property="og:url" content="<?= !empty($canonicalTags) ? $canonicalTags : current_url() ?>" />
         <meta property="og:locale" content="en_US" />
+        
         <?php 
-        // Use page-specific image if available, otherwise use default
+        // ✅ OPENGRAPH OPTIMIZATION: Smart image selection with fallbacks
         $ogImage = base_url('resource/og-image-default.jpg');
+        $ogImageType = 'image/jpeg';
         
         // Try to load from database settings first
         try {
             $siteSettings = @json_decode(@file_get_contents(RESOURCE_PATH . 'web-setting.info'));
-            if ($siteSettings && !empty($siteSettings->og_image) && file_exists('resource/'.$siteSettings->og_image)) {
+            if ($siteSettings && !empty($siteSettings->og_image) && file_exists(RESOURCE_PATH . $siteSettings->og_image)) {
                 $ogImage = base_url('resource/'.$siteSettings->og_image);
+                // Detect image type
+                $ext = strtolower(pathinfo($siteSettings->og_image, PATHINFO_EXTENSION));
+                $ogImageType = $ext === 'png' ? 'image/png' : ($ext === 'webp' ? 'image/webp' : 'image/jpeg');
             }
         } catch (\Exception $e) {
             // Fall back to default
@@ -64,13 +77,25 @@ $gSitekey = '6LfFIOggAAAAAG2Rse1QdKSAWH8ibnW2kPEe9x0x';
         // Override with post-specific image if available
         if (!empty($post->image ?? '')) {
             $ogImage = base_url('uploads/' . $post->image);
+            $ext = strtolower(pathinfo($post->image, PATHINFO_EXTENSION));
+            $ogImageType = $ext === 'png' ? 'image/png' : ($ext === 'webp' ? 'image/webp' : 'image/jpeg');
         }
         ?>
+        
+        <!-- Primary OG Image -->
         <meta property="og:image" content="<?= $ogImage ?>" />
+        <meta property="og:image:secure_url" content="<?= $ogImage ?>" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content="<?= htmlspecialchars($metaTitle) ?>" />
-        <meta property="og:image:type" content="image/jpeg" />
+        <meta property="og:image:type" content="<?= $ogImageType ?>" />
+        
+        <!-- Additional metadata for better social sharing -->
+        <meta property="og:updated_time" content="<?= date('c') ?>" />
+        
+        <!-- ============================================ -->
+        <!-- TWITTER CARD META TAGS                       -->
+        <!-- ============================================ -->
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:site" content="@samfware" />
         <meta name="twitter:creator" content="@samfware" />
@@ -78,6 +103,16 @@ $gSitekey = '6LfFIOggAAAAAG2Rse1QdKSAWH8ibnW2kPEe9x0x';
         <meta name="twitter:description" content="<?= $metaDesription ?>" />
         <meta name="twitter:image" content="<?= $ogImage ?>" />
         <meta name="twitter:image:alt" content="<?= htmlspecialchars($metaTitle) ?>" />
+        <meta name="twitter:domain" content="<?= parse_url(base_url(), PHP_URL_HOST) ?>" />
+        
+        <!-- ============================================ -->
+        <!-- ADDITIONAL SOCIAL PLATFORMS                  -->
+        <!-- ============================================ -->
+        <!-- Pinterest -->
+        <meta name="pinterest-rich-pin" content="true" />
+        
+        <!-- LinkedIn -->
+        <meta property="og:see_also" content="<?= base_url() ?>" />
         
         <!-- Additional Meta Tags -->
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -88,8 +123,11 @@ $gSitekey = '6LfFIOggAAAAAG2Rse1QdKSAWH8ibnW2kPEe9x0x';
         // ✅ SEO PHASE 1: Prevent "Crawled - Currently Not Indexed" issues
         // Detect filtered or paginated URLs and add robots meta + canonical
         $hasFilters = $request_obj->getGet('bit') || $request_obj->getGet('os') || $request_obj->getGet('csc');
-        $currentPage = (int)($request_obj->getGet('page') ?? 1);
-        $hasPagination = $currentPage > 1;
+        
+        // Check BOTH pagination systems: ?page= AND ?record=
+        $recordParam = $request_obj->getGet('record');
+        $pageParam = (int)($request_obj->getGet('page') ?? 1);
+        $hasPagination = ($recordParam && $recordParam !== '0') || ($pageParam > 1);
         
         // For filtered or paginated pages: noindex to prevent duplicate content
         if ($hasFilters || $hasPagination):
@@ -143,7 +181,25 @@ $gSitekey = '6LfFIOggAAAAAG2Rse1QdKSAWH8ibnW2kPEe9x0x';
                     <!-- Logo -->
                     <div class="flex-shrink-0">
                         <a href="<?= base_url() ?>" class="flex items-center space-x-3 group">
-                            <img src="<?= $webLogo ?>" alt="<?= $web->webTitle ?? '' ?>" class="h-10 w-auto transition-transform group-hover:scale-105">
+                            <?php 
+                            // Extract filename from URL (remove query string and base_url)
+                            $logoFile = '';
+                            if (!empty($webLogo)) {
+                                $logoUrl = explode('?', $webLogo)[0]; // Remove ?v=timestamp
+                                $logoFile = str_replace(base_url().'resource/', '', $logoUrl);
+                            }
+                            
+                            // Check if logo file exists
+                            $logoExists = !empty($logoFile) && file_exists(RESOURCE_PATH . $logoFile);
+                            
+                            if ($logoExists): 
+                            ?>
+                                <img src="<?= $webLogo ?>" alt="<?= $web->webTitle ?? 'SamFware' ?>" loading="lazy" class="h-10 w-auto transition-transform group-hover:scale-105">
+                            <?php else: ?>
+                                <span class="text-2xl font-bold text-accent transition-transform group-hover:scale-105" style="font-family: 'Inter', sans-serif;">
+                                    <?= $web->webTitle ?? 'SamFware' ?>
+                                </span>
+                            <?php endif; ?>
                         </a>
                     </div>
 

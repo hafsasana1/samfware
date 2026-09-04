@@ -92,10 +92,12 @@ class LandingPages extends BaseController
         $data['latest_model_ads'] = $this->ads['latest_model_ads'] ?? '';
 
         $data['meta_tags']        = $this->web->metaTags       ?? '';
+        $data['page_title']       = $homePage->metaTitle ?? 'Samsung Firmware Download'; // ✅ Clean for H1
         $data['meta_title']       = $this->web->metaTitle      ?? '';
         $data['meta_description'] = $this->web->metaDesription ?? '';
-        $data['web_title']        = ($homePage->metaTitle ?? '') . ' - ' . ($this->web->webTitle ?? '');
+        $data['web_title']        = ($homePage->metaTitle ?? '') . ' | ' . ($this->web->webTitle ?? 'SamFware');
         $data['homePage']         = $homePage;
+        $data['web']              = $this->web; // ✅ Pass web object to view for logo display
         $data['request']          = 'home';
 
         return view(LANDING_PATH . '/include/content', $data);
@@ -185,6 +187,23 @@ class LandingPages extends BaseController
         $postCount = $record->getNumRows();
 
         if ($postCount == 0) {
+            // ✅ UX: Check if post exists but is scheduled/draft (better error handling)
+            $scheduledPost = $this->db->table('fw_posts')
+                                      ->where('model', $model)
+                                      ->where('version', $version)
+                                      ->groupStart()
+                                          ->where('csc', strtoupper($csc))
+                                          ->orWhere('country', $csc)
+                                      ->groupEnd()
+                                      ->get()->getRow();
+            
+            if ($scheduledPost && $scheduledPost->postStatus != 'Active') {
+                // Post exists but not published yet - redirect to model page with message
+                return redirect()->to(base_url('firmware/' . $model))
+                                ->with('info', 'This firmware version will be available soon.');
+            }
+            
+            // Post doesn't exist at all - show 404
             return $this->indexOld();
         } else {
             $post = $record->getRow();
@@ -231,14 +250,56 @@ class LandingPages extends BaseController
 
         $data['meta_tags']        = replacePostToken($post->metaTags, $post);
         $data['meta_title']       = replacePostToken($post->metaTitle, $post);
+        $data['page_title']       = replacePostToken($post->metaTitle, $post); // ✅ Clean title for H1 (no brand)
         $data['meta_description'] = replacePostToken($post->metaDesription, $post);
-        $data['web_title']        = $post->postTitle . ' - ' . ($this->web->webTitle ?? '');
+        
+        // ✅ BRANDING: Smart truncation for web_title to fit brand within 55 chars
+        $brandSuffix = ' | ' . ($this->web->webTitle ?? 'SamFware');
+        $maxLength = 55 - strlen($brandSuffix); // 43 chars for content
+        
+        if (strlen($post->postTitle) > $maxLength) {
+            // Truncate intelligently - keep model, CSC, version priority
+            $truncated = substr($post->postTitle, 0, $maxLength);
+            // Remove incomplete word at end
+            $truncated = preg_replace('/\s+\S*$/', '', $truncated);
+            $data['web_title'] = $truncated . $brandSuffix;
+        } else {
+            $data['web_title'] = $post->postTitle . $brandSuffix;
+        }
 
         // ✅ SEO FIX: Provide fallback meta tags if database fields are empty
         if (empty(trim($data['meta_title']))) {
-            // ✅ GALAXY KEYWORD: Add "Galaxy" prefix for better SEO
+            // ✅ PROGRESSIVE FUNNEL: Add "Download" for action intent
             $displayDevice = formatDeviceDisplay($post->device);
-            $data['meta_title'] = "{$post->model} {$post->csc} Firmware {$post->version} - {$displayDevice} Stock ROM";
+            $baseTitle = "Download {$post->model} {$post->csc} {$post->version} Firmware";
+            $data['page_title'] = $baseTitle; // ✅ Clean for H1
+            $data['meta_title'] = $baseTitle . " | " . ($this->web->webTitle ?? 'SamFware'); // ✅ Branded for <title>
+        } else {
+            // Admin filled meta title - ensure "Download" prefix and brand suffix
+            $cleanTitle = trim($data['meta_title']);
+            
+            // Add "Download" prefix if not present
+            if (stripos($cleanTitle, 'Download') !== 0) {
+                $cleanTitle = 'Download ' . $cleanTitle;
+            }
+            
+            // Store clean title for H1 (remove brand if present)
+            $data['page_title'] = preg_replace('/\s*\|\s*SamFware\s*$/i', '', $cleanTitle);
+            
+            // Add brand suffix if not present
+            if (strpos($cleanTitle, 'SamFware') === false && strpos($cleanTitle, '|') === false) {
+                $brandSuffix = ' | ' . ($this->web->webTitle ?? 'SamFware');
+                
+                // Smart truncation if too long (keep under 60 chars)
+                $maxMetaLength = 58 - strlen($brandSuffix); // 58 to be safe
+                if (strlen($cleanTitle) > $maxMetaLength) {
+                    $cleanTitle = substr($cleanTitle, 0, $maxMetaLength);
+                    $cleanTitle = preg_replace('/\s+\S*$/', '', $cleanTitle); // Remove incomplete word
+                }
+                $data['meta_title'] = $cleanTitle . $brandSuffix;
+            } else {
+                $data['meta_title'] = $cleanTitle;
+            }
         }
         
         if (empty(trim($data['meta_description']))) {
@@ -280,9 +341,10 @@ class LandingPages extends BaseController
         $data['siteStats'] = $this->getSiteStats();
         
         // ⚠️ REMOVED: Meta keywords (deprecated since 2009)
-        $data['meta_title']       = 'Contact US ' . ($homePage->metaTitle ?? '');
+        $data['page_title']       = 'Contact Us'; // ✅ Clean title for H1
+        $data['meta_title']       = 'Contact Us | ' . ($this->web->webTitle ?? 'SamFware');
         $data['meta_description'] = 'Contact US ' . ($homePage->metaDesription ?? '');
-        $data['web_title']        = 'Contact US - ' . ($this->web->webTitle ?? '');
+        $data['web_title']        = 'Contact Us | ' . ($this->web->webTitle ?? 'SamFware');
         $data['request']          = 'contact-us';
 
         return view(LANDING_PATH . '/include/content', $data);
@@ -313,10 +375,12 @@ class LandingPages extends BaseController
             $data['siteStats'] = $this->getSiteStats();
             
             // ⚠️ REMOVED: Meta keywords (deprecated since 2009)
+            $data['page_title']       = $pagee->pageTitle ?? 'Page'; // ✅ Clean for H1
             $data['meta_title']       = $pagee->metaTitle         ?? '';
             $data['meta_description'] = $pagee->metaDesription    ?? '';
-            $data['web_title']        = ($pagee->pageTitle ?? '') . ' - ' . ($this->web->webTitle ?? '');
+            $data['web_title']        = ($pagee->pageTitle ?? '') . ' | ' . ($this->web->webTitle ?? 'SamFware');
             $data['pagee']            = $pagee;
+            $data['web']              = $this->web; // ✅ Pass web object to view for logo display
             $data['request']          = 'view-cms-page';
 
             return view(LANDING_PATH . '/include/content', $data);
@@ -359,9 +423,10 @@ class LandingPages extends BaseController
         $data['siteStats'] = $this->getSiteStats();
         
         // ⚠️ REMOVED: Meta keywords (deprecated since 2009)
+        $data['page_title']       = $cat->category ?? 'Category'; // ✅ Clean for H1
         $data['meta_title']       = $homePage->metaTitle      ?? '';
         $data['meta_description'] = $homePage->metaDesription ?? '';
-        $data['web_title']        = ($homePage->metaTitle ?? '') . ' - ' . ($this->web->webTitle ?? '');
+        $data['web_title']        = ($homePage->metaTitle ?? '') . ' | ' . ($this->web->webTitle ?? 'SamFware');
         $data['request']          = 'category-posts';
 
         return view(LANDING_PATH . '/include/content', $data);
@@ -416,29 +481,38 @@ class LandingPages extends BaseController
                 $countryName = $worldCountries[$firstRec->country]['name'] ?? '';
             }
             
-            $mTitle = $model . ' ' . $displayDeviceName . ' Firmware ' . $csc;
-            if ($countryName) {
-                $mTitle .= ' (' . $countryName . ')';
-            }
+            // ✅ SEO: Create separate page title (clean) and meta title (branded + optimized)
+            // H1/H2 will show: "SM-F761U1 GALAXY Z FLIP7 FE XAA\nUnited States"
+            $pageTitle = $model . ' ' . $displayDeviceName . ' ' . $csc . ($countryName ? "\n" . $countryName : '');
+            
+            // Meta title optimized: Add "Firmware" for clear intent, under 60 chars
+            $mTitle = $model . ' ' . $displayDeviceName . ' ' . $csc . ' Firmware | ' . ($this->web->webTitle ?? 'SamFware');
             
             $data['meta_description'] = "Download official Samsung {$displayDeviceName} ({$model}) firmware for {$csc}" . 
                                        ($countryName ? " ({$countryName})" : "") . 
                                        ". {$versionCount}+ stock ROM versions available. Latest Android firmware updates, fast & free download, complete guides.";
         } else {
             // Step 1: Model-only page
-            $mTitle = $model . ' ' . $displayDeviceName . ' Firmware - All Versions';
+            // ✅ SEO: Create separate page title (clean) and meta title (branded + optimized)
+            // H1/H2 will show: "SM-F761U1 GALAXY Z FLIP7 FE Firmware - All versions"
+            $pageTitle = $model . ' ' . $displayDeviceName . ' Firmware - All versions';
+            
+            // Meta title optimized: Add "Firmware" for clear intent, under 60 chars
+            $mTitle = $model . ' ' . $displayDeviceName . ' Firmware | ' . ($this->web->webTitle ?? 'SamFware');
             
             $data['meta_description'] = "Download official Samsung {$displayDeviceName} ({$model}) firmware. {$versionCount}+ stock ROM versions for all regions. Latest Android updates, fast & free download, complete installation guides.";
         }
         
-        // Add pagination indicator to title
+        // Add pagination indicator to titles
         if ($this->page_record != '0') {
             $pageNum = ((int)$this->page_record / 10) + 1;
+            $pageTitle .= ' - Page ' . $pageNum;
             $mTitle .= ' - Page ' . $pageNum;
         }
 
-        $data['meta_title']       = $mTitle;
-        $data['web_title']        = ($homePage->metaTitle ?? '') . ' - ' . ($this->web->webTitle ?? '');
+        $data['page_title']       = $pageTitle; // ✅ Clean title for H1/H2 (no brand)
+        $data['meta_title']       = $mTitle;     // ✅ Branded title for <title> tag
+        $data['web_title']        = $mTitle;     // ✅ Use same branded title for <title> tag
 
         // ✅ SEO PHASE 1: Set canonical URL (clean URL without query parameters)
         // This helps consolidate all filtered/paginated variations to the main page
@@ -617,9 +691,11 @@ class LandingPages extends BaseController
         // ✅ REAL STATS: Pass site statistics to all pages
         $data['siteStats'] = $this->getSiteStats();
         
-        $data['meta_title']       = 'Download Now - ' . ($this->web->metaTitle ?? '');
         // ⚠️ REMOVED: Meta keywords (deprecated since 2009)
+        $data['page_title']       = 'Download Samsung Firmware'; // ✅ Clean title for H1
+        $data['meta_title']       = 'Download Samsung Firmware | ' . ($this->web->webTitle ?? 'SamFware');
         $data['meta_description'] = $this->web->metaDesription ?? '';
+        $data['web_title']        = 'Download Samsung Firmware | ' . ($this->web->webTitle ?? 'SamFware');
         $data['web_title']        = 'Download Now';
         $data['post']             = $post;
         $data['downrec']          = getPageByArea('download');
@@ -745,15 +821,21 @@ class LandingPages extends BaseController
         // ⚠️ NOTE: Hardcoded meta keywords below for blog listing (consider removing in future)
         $data['meta_tags']   = 'samsung firmware, samsung firmware download, samfirmware, firmware samsung, firmware download, samsung update, samsung firmware update, galaxy firmware, one ui';
 
-        $mTitle = 'Blog - ' . ($this->web->webTitle ?? '');
+        $mTitle = 'Blog';
+        $pageTitle = 'Blog'; // ✅ Clean title for H1
         if ($this->page_record != '0') {
-            $mTitle .= ' #' . $this->page_record;
+            $pageNum = ((int)$this->page_record + 1);
+            $mTitle .= ' - Page ' . $pageNum;
+            $pageTitle .= ' - Page ' . $pageNum;
         }
+        $mTitle .= ' | ' . ($this->web->webTitle ?? 'SamFware');
+        
         $mDescription = 'News in SamFware.com - Samsung News';
         if ($this->page_record != '0') {
-            $mDescription .= ' #' . $this->page_record;
+            $mDescription .= ' - Page ' . ((int)$this->page_record + 1);
         }
 
+        $data['page_title']       = $pageTitle; // ✅ Clean title for H1
         $data['meta_title']       = $mTitle;
         $data['meta_description'] = $mDescription;
         $data['web_title']        = $mTitle;
@@ -785,9 +867,10 @@ class LandingPages extends BaseController
         $data['siteStats'] = $this->getSiteStats();
         
         // ⚠️ REMOVED: Meta keywords (deprecated since 2009)
+        $data['page_title']       = $pagee->pageTitle ?? 'Blog Post'; // ✅ Clean for H1
         $data['meta_title']       = $pagee->metaTitle         ?? '';
         $data['meta_description'] = $pagee->metaDesription    ?? '';
-        $data['web_title']        = ($pagee->pageTitle ?? '') . ' - ' . ($this->web->webTitle ?? '');
+        $data['web_title']        = ($pagee->pageTitle ?? '') . ' | ' . ($this->web->webTitle ?? 'SamFware');
         $data['pagee']            = $pagee;
         $data['request']          = 'view-blog-page';
 
@@ -810,9 +893,10 @@ class LandingPages extends BaseController
         $data['siteStats'] = $this->getSiteStats();
         
         // ⚠️ REMOVED: Meta keywords (deprecated since 2009)
-        $data['meta_title']       = 'Internet Speed Test ' . ($homePage->metaTitle ?? '');
+        $data['page_title']       = 'Internet Speed Test'; // ✅ Clean title for H1
+        $data['meta_title']       = 'Internet Speed Test | ' . ($this->web->webTitle ?? 'SamFware');
         $data['meta_description'] = 'Internet Speed Test ' . ($homePage->metaDesription ?? '');
-        $data['web_title']        = 'Internet Speed Test - ' . ($this->web->webTitle ?? '');
+        $data['web_title']        = 'Internet Speed Test | ' . ($this->web->webTitle ?? 'SamFware');
         $data['request']          = 'internet-speed-test';
 
         return view(LANDING_PATH . '/include/content', $data);
@@ -870,8 +954,9 @@ class LandingPages extends BaseController
                 'recentCount' => $recentUpdates
             ];
             
-            // Cache for 1 hour (3600 seconds)
-            $cache->save($cacheKey, $stats, 3600);
+            // Cache for 5 minutes (300 seconds) - reduced from 3600 for more frequent updates
+            // ✅ IMPROVEMENT: Faster stat updates + paired with manual cache clear on publish
+            $cache->save($cacheKey, $stats, 300);
         }
         
         return $stats;

@@ -1,0 +1,360 @@
+================================================================================
+  HTACCESS VERIFICATION & DEPLOYMENT GUIDE
+================================================================================
+
+CURRENT STATUS:
+✓ You have TWO .htaccess files in your root directory
+
+================================================================================
+  FILE #1: .htaccess (CURRENT - FOR LOCALHOST)
+================================================================================
+
+Location: c:\xampp\htdocs\sampro\.htaccess
+Size: 3,212 bytes
+Last Modified: August 2026
+
+PURPOSE: 
+Used for local development on XAMPP (localhost/sampro/)
+
+KEY SETTING:
+RewriteBase /sampro/     ← For subfolder deployment
+
+ASSET PATHS:
+/sampro/assets/*   → /sampro/public/assets/*
+/sampro/resource/* → /sampro/public/resource/*
+
+CURRENTLY IN USE: ✓ YES (on localhost)
+
+================================================================================
+  FILE #2: .htaccess.production (FOR LIVE SERVER)
+================================================================================
+
+Location: c:\xampp\htdocs\sampro\.htaccess.production
+Size: 3,455 bytes
+Last Modified: September 2026
+
+PURPOSE:
+Used for production deployment on live domain (yourdomain.com/)
+
+KEY SETTING:
+RewriteBase /     ← For root deployment (no subfolder)
+
+ASSET PATHS:
+/assets/*   → /public/assets/*
+/resource/* → /public/resource/*
+
+ADDITIONAL FEATURES:
+• HTTPS force redirect (commented out, ready to enable)
+• Production-optimized paths
+
+CURRENTLY IN USE: ✗ NO (backup file for deployment)
+
+================================================================================
+  KEY DIFFERENCES BETWEEN THE TWO FILES
+================================================================================
+
+┌─────────────────────────┬──────────────────┬─────────────────────┐
+│ Setting                 │ .htaccess        │ .htaccess.production│
+├─────────────────────────┼──────────────────┼─────────────────────┤
+│ RewriteBase             │ /sampro/         │ /                   │
+│ Asset URLs              │ /sampro/assets/  │ /assets/            │
+│ Resource URLs           │ /sampro/resource/│ /resource/          │
+│ Error Document          │ /sampro/index.php│ index.php           │
+│ HTTPS Force             │ Not included     │ Included (disabled) │
+│ Usage                   │ Localhost (XAMPP)│ Live Server         │
+└─────────────────────────┴──────────────────┴─────────────────────┘
+
+================================================================================
+  WHICH FILE IS BEING USED?
+================================================================================
+
+LOCALHOST (XAMPP):
+✓ USING: .htaccess
+✓ Correct for: http://localhost/sampro/
+
+LIVE SERVER:
+⚠️ CHECK: You need to verify which file is on your live server
+⚠️ SHOULD USE: .htaccess.production (renamed to .htaccess)
+
+================================================================================
+  DEPLOYMENT INSTRUCTIONS FOR LIVE SERVER
+================================================================================
+
+STEP 1: BACKUP CURRENT LIVE .HTACCESS (If exists)
+──────────────────────────────────────────────────
+If your live server already has a .htaccess file, back it up first:
+
+Via FTP/File Manager:
+1. Download existing .htaccess from live server
+2. Rename it to .htaccess.backup.old
+3. Save it locally for reference
+
+Via SSH:
+cd /path/to/your/site
+cp .htaccess .htaccess.backup.old
+
+STEP 2: UPLOAD .HTACCESS.PRODUCTION TO LIVE SERVER
+──────────────────────────────────────────────────
+You have THREE options:
+
+OPTION A: Via FTP/File Manager (Easiest)
+1. Upload .htaccess.production to your live server root
+2. Rename it from ".htaccess.production" to ".htaccess"
+3. Overwrite existing .htaccess if asked
+4. Done!
+
+OPTION B: Via SSH (Recommended)
+1. Upload .htaccess.production to live server:
+   scp .htaccess.production user@yourserver.com:/path/to/site/
+
+2. Rename it:
+   ssh user@yourserver.com
+   cd /path/to/your/site
+   mv .htaccess.production .htaccess
+
+3. Set permissions:
+   chmod 644 .htaccess
+
+4. Done!
+
+OPTION C: Copy Content (Quick)
+1. Open .htaccess.production in text editor
+2. Copy ALL content
+3. Login to cPanel → File Manager
+4. Navigate to public_html (or root)
+5. Edit .htaccess file
+6. Replace ALL content with copied content
+7. Save
+
+STEP 3: ENABLE HTTPS REDIRECT (After SSL is active)
+──────────────────────────────────────────────────
+If your live server has SSL certificate installed:
+
+1. Open .htaccess on live server
+2. Find these lines at the bottom:
+   # ✅ Force HTTPS (uncomment after SSL is active)
+   # <IfModule mod_rewrite.c>
+   #     RewriteCond %{HTTPS} off
+   #     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+   # </IfModule>
+
+3. Remove the # comments (uncomment):
+   <IfModule mod_rewrite.c>
+       RewriteCond %{HTTPS} off
+       RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+   </IfModule>
+
+4. Save file
+
+5. Test: Visit http://yourdomain.com (should redirect to https://)
+
+STEP 4: VERIFY IT'S WORKING
+──────────────────────────────────────────────────
+Test these URLs on your live site:
+
+✓ Homepage: https://yourdomain.com/
+✓ Logo: https://yourdomain.com/resource/logo.png
+✓ CSS: https://yourdomain.com/assets/css/home.css
+✓ Firmware post: https://yourdomain.com/any-post-slug-here
+
+If all work → .htaccess is correct!
+If 404 errors → Check RewriteBase setting
+
+================================================================================
+  COMMON ISSUES & FIXES
+================================================================================
+
+ISSUE #1: All pages show 404 error on live server
+──────────────────────────────────────────────────
+CAUSE: Wrong RewriteBase setting
+
+FIX:
+1. Check if your site is in root or subfolder
+   
+   If root (yourdomain.com/):
+   RewriteBase /
+   
+   If subfolder (yourdomain.com/subfolder/):
+   RewriteBase /subfolder/
+
+2. Update .htaccess accordingly
+
+ISSUE #2: Assets (CSS/JS/Images) not loading (404)
+──────────────────────────────────────────────────
+CAUSE: RewriteRule paths wrong for root deployment
+
+FIX:
+Make sure you have these lines:
+RewriteRule ^(assets/.*)$ public/$1 [L,QSA]
+RewriteRule ^(resource/.*)$ public/$1 [L,QSA]
+
+NOT:
+RewriteRule ^sampro/(assets/.*)$ public/$1 [L,QSA]  ← Wrong for production
+
+ISSUE #3: HTTPS redirect creates infinite loop
+──────────────────────────────────────────────────
+CAUSE: Server already handles HTTPS or proxy issue
+
+FIX:
+Change the HTTPS redirect to:
+<IfModule mod_rewrite.c>
+    RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+Or disable the HTTPS redirect (comment it back out)
+
+ISSUE #4: "Internal Server Error" (500)
+──────────────────────────────────────────────────
+CAUSE: Apache mod_rewrite not enabled or syntax error
+
+FIX:
+1. Enable mod_rewrite on server:
+   sudo a2enmod rewrite
+   sudo systemctl restart apache2
+
+2. Check .htaccess syntax:
+   apachectl configtest
+
+3. Check server error logs:
+   tail -f /var/log/apache2/error.log
+
+ISSUE #5: Homepage loads but subpages don't
+──────────────────────────────────────────────────
+CAUSE: AllowOverride not enabled in Apache config
+
+FIX (requires server access):
+Edit Apache config:
+sudo nano /etc/apache2/sites-available/yoursite.conf
+
+Add/change:
+<Directory /var/www/html>
+    AllowOverride All
+</Directory>
+
+Restart Apache:
+sudo systemctl restart apache2
+
+================================================================================
+  LOCALHOST VS PRODUCTION - QUICK REFERENCE
+================================================================================
+
+FOR LOCALHOST DEVELOPMENT (XAMPP):
+File to use: .htaccess (already in place)
+RewriteBase: /sampro/
+URLs: http://localhost/sampro/
+
+FOR LIVE SERVER DEPLOYMENT:
+File to use: .htaccess.production (rename to .htaccess)
+RewriteBase: /
+URLs: https://yourdomain.com/
+
+================================================================================
+  CHECKLIST FOR LIVE DEPLOYMENT
+================================================================================
+
+BEFORE DEPLOYMENT:
+[ ] Backup existing .htaccess from live server (if exists)
+[ ] Verify SSL certificate is installed (for HTTPS)
+[ ] Check if site will be in root or subfolder
+[ ] Test .htaccess.production file locally if possible
+
+DURING DEPLOYMENT:
+[ ] Upload .htaccess.production to live server
+[ ] Rename to .htaccess (overwrite old file)
+[ ] Set file permissions: chmod 644 .htaccess
+[ ] If SSL active: Enable HTTPS redirect
+
+AFTER DEPLOYMENT:
+[ ] Test homepage loads
+[ ] Test assets load (logo, CSS, JS)
+[ ] Test firmware post pages
+[ ] Test admin login
+[ ] Test scraper URL (cron job)
+[ ] Test scheduler URL (cron job)
+[ ] Check browser console for 404 errors
+[ ] Verify HTTPS redirect works
+
+IF ISSUES:
+[ ] Check Apache error logs
+[ ] Verify mod_rewrite is enabled
+[ ] Confirm RewriteBase is correct
+[ ] Test with curl: curl -I https://yourdomain.com/
+
+================================================================================
+  TESTING COMMANDS (SSH)
+================================================================================
+
+Check if mod_rewrite is enabled:
+apachectl -M | grep rewrite
+
+Test .htaccess syntax:
+apachectl configtest
+
+View real-time error log:
+tail -f /var/log/apache2/error.log
+
+Test URL with curl:
+curl -I https://yourdomain.com/
+curl -I https://yourdomain.com/resource/logo.png
+
+Check file permissions:
+ls -la .htaccess
+
+Should show: -rw-r--r-- (644)
+
+================================================================================
+  IMPORTANT NOTES
+================================================================================
+
+1. DON'T MODIFY .htaccess.production on localhost
+   Keep it as production backup
+
+2. DON'T upload localhost .htaccess to live server
+   It has /sampro/ paths that won't work on root domain
+
+3. DON'T enable HTTPS redirect until SSL is installed
+   Will cause "too many redirects" error
+
+4. DO keep both files in version control
+   .htaccess for localhost
+   .htaccess.production for deployment
+
+5. DO test on staging server first if available
+   Before deploying to production
+
+================================================================================
+  SUMMARY
+================================================================================
+
+CURRENT SITUATION:
+✓ .htaccess → Used on localhost (http://localhost/sampro/)
+✓ .htaccess.production → Ready for live deployment
+
+WHAT YOU NEED TO DO FOR LIVE SERVER:
+1. Upload .htaccess.production to live server
+2. Rename it to .htaccess
+3. Enable HTTPS redirect (if SSL installed)
+4. Test all URLs work correctly
+
+FILE STATUS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Localhost:  .htaccess            → ✓ ACTIVE (correct)
+Production: .htaccess.production → ⚠ WAITING FOR DEPLOYMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Both files are optimized and ready to use! 🚀
+
+================================================================================
+  END OF GUIDE
+================================================================================
+
+Created by: Kiro AI
+Date: 2026-08-28
+Version: 1.0
+
+When deploying to live server, follow the checklist above step-by-step.
+Test thoroughly after deployment to ensure everything works correctly.
+
+Good luck with your deployment! 🎉

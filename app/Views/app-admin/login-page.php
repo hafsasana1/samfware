@@ -281,6 +281,21 @@ session()->set('seq-ans', $qanswer);
                         </div>
                     </div>
 
+                    <!-- Remember Me Checkbox -->
+                    <div class="flex items-center justify-between">
+                        <label class="flex items-center gap-3 cursor-pointer group">
+                            <input type="checkbox" 
+                                   name="remember_me" 
+                                   value="1"
+                                   <?= get_cookie('rememberme') ? 'checked' : '' ?>
+                                   class="w-5 h-5 rounded border-2 border-cyan-400 bg-transparent text-cyan-400 focus:ring-2 focus:ring-cyan-400 focus:ring-offset-0 cursor-pointer transition-all">
+                            <span class="text-sm text-gray-300 group-hover:text-cyan-400 transition-colors">
+                                <i class="fas fa-clock text-cyan-400 mr-1"></i>
+                                Keep me signed in for 30 days
+                            </span>
+                        </label>
+                    </div>
+
                     <!-- Submit Button -->
                     <button type="submit" 
                             name="submit" 
