@@ -93,9 +93,10 @@ class LandingPages extends BaseController
 
         $data['meta_tags']        = $this->web->metaTags       ?? '';
         $data['page_title']       = $homePage->metaTitle ?? 'Samsung Firmware Download'; // ✅ Clean for H1
-        $data['meta_title']       = $this->web->metaTitle      ?? '';
-        $data['meta_description'] = $this->web->metaDesription ?? '';
-        $data['web_title']        = ($homePage->metaTitle ?? '') . ' | ' . ($this->web->webTitle ?? 'SamFware');
+        // ✅ PRIORITY FIX: Use Web Portal settings first, then fall back to CMS home page
+        $data['meta_title']       = $this->web->metaTitle      ?: ($homePage->metaTitle ?? '');
+        $data['meta_description'] = $this->web->metaDesription ?: ($homePage->metaDesription ?? '');
+        $data['web_title']        = ($data['meta_title'] ?: $homePage->metaTitle ?? '') . ' | ' . ($this->web->webTitle ?? 'SamFware');
         $data['homePage']         = $homePage;
         $data['web']              = $this->web; // ✅ Pass web object to view for logo display
         $data['request']          = 'home';
