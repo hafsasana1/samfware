@@ -408,7 +408,7 @@ if (false) { // Set to true to enable debug
         <?php 
         $prevTime = null;
         foreach ($upcomingPosts as $index => $post): 
-            $currentTime = strtotime($post->scheduledPublishTime);
+            $currentTime = strtotime($post->scheduledPublishTime . ' UTC');
             $gap = null;
             if ($prevTime) {
                 $gapMinutes = round(($currentTime - $prevTime) / 60);

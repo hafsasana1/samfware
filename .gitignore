@@ -34,3 +34,11 @@ create_favicon_logo.html
 !public/resource/logo.svg
 !public/assets/favicon.svg
 !public/assets/logo.svg
+.env
+backups/
+writable/session/*
+writable/cache/*
+writable/logs/*
+*.backup*
+writable/debugbar/*
+writable/query_cache/*

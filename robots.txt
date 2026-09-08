@@ -12,4 +12,4 @@ Allow: /
 Allow: /firmware/
 Allow: /blog/
 Allow: /assets/
-Sitemap: https://yoursite.com/sitemaps.xml
+Sitemap: https://samfware.com/sitemaps.xml

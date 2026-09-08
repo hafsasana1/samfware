@@ -135,7 +135,13 @@ $gSitekey = '6LfFIOggAAAAAG2Rse1QdKSAWH8ibnW2kPEe9x0x';
         <meta name="robots" content="noindex, follow">
         <?php endif; ?>
         
-        <link href="<?= $favicon ?>" rel="icon" type="image/png">
+        <!-- Favicon for all browsers and devices -->
+        <link rel="icon" type="image/png" sizes="512x512" href="<?= $favicon ?>">
+        <link rel="icon" type="image/png" sizes="192x192" href="<?= $favicon ?>">
+        <link rel="icon" type="image/png" sizes="32x32" href="<?= $favicon ?>">
+        <link rel="icon" type="image/png" sizes="16x16" href="<?= $favicon ?>">
+        <link rel="shortcut icon" href="<?= base_url() ?>favicon.ico">
+        <link rel="apple-touch-icon" sizes="180x180" href="<?= $favicon ?>">
         
         <?php 
         // Output canonical tag - either from controller or auto-generate clean URL
@@ -150,7 +156,7 @@ $gSitekey = '6LfFIOggAAAAAG2Rse1QdKSAWH8ibnW2kPEe9x0x';
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-        <link href="<?= base_url() ?>assets/css/tailwind-output.css?v=1.0.0" rel="stylesheet">
+        <link href="<?= base_url() ?>assets/css/output.css?v=1.0.0" rel="stylesheet">
         <link href="<?= base_url() ?>assets/frontsite/plugins/font-awesome/css/font-awesome.min.css" rel="stylesheet">
         <link href="<?= base_url() ?>assets/css/home.css?v=1.0.0" rel="stylesheet">
         <script defer src="<?= base_url() ?>assets/js/alpine.min.js"></script>

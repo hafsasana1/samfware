@@ -215,7 +215,15 @@ class AdminPanel extends BaseController
             exit('1');
         }
 
-        $data['ads']     = getSiteMeta('ads');
+        $ads = getSiteMeta('ads');
+        // ✅ FIX: Provide default values if keys don't exist
+        $data['ads'] = [
+            'header_ads'       => $ads['header_ads'] ?? '',
+            'sidebar_ads'      => $ads['sidebar_ads'] ?? '',
+            'footer_ads'       => $ads['footer_ads'] ?? '',
+            'post_ads'         => $ads['post_ads'] ?? '',
+            'latest_model_ads' => $ads['latest_model_ads'] ?? '',
+        ];
         $data['request'] = 'ads-settings';
         return view(ADMIN_PATH . '/include/content', $data);
     }
@@ -231,7 +239,11 @@ class AdminPanel extends BaseController
             exit('1');
         }
 
-        $data['record']  = getSiteMeta('analytics');
+        $analytics = getSiteMeta('analytics');
+        // ✅ FIX: Provide default value if key doesn't exist
+        $data['record'] = [
+            'analytics' => $analytics['analytics'] ?? '',
+        ];
         $data['request'] = 'analytics-settings';
         return view(ADMIN_PATH . '/include/content', $data);
     }
@@ -343,7 +355,8 @@ class AdminPanel extends BaseController
         $pageId = trim($this->request->getUri()->getSegment(4));
         if (trim($this->request->getUri()->getSegment(3)) == 'edit') {
             $page = $this->home_model->getCMSPage($pageId);
-            if ($page == 0) return redirect()->to(base_url('error-404'));
+            // ✅ FIX: Check if page is empty/false, not comparing object to int
+            if (empty($page) || $page === false) return redirect()->to(base_url('error-404'));
             $data['page'] = $page;
         }
         $data['request'] = 'add-edit-cms';
@@ -359,7 +372,7 @@ class AdminPanel extends BaseController
         $pageTitle      = InputSanitizer::sanitizeString($this->request->getPost('title'));
         $navTitle       = InputSanitizer::sanitizeString($this->request->getPost('navTitle'));
         $status         = InputSanitizer::sanitizeString($this->request->getPost('status'));
-        $position       = InputSanitizer::sanitizeInt($this->request->getPost('position'));
+        $position       = InputSanitizer::sanitizeString($this->request->getPost('position')); // FIX: Changed from sanitizeInt to sanitizeString
         $isButton       = InputSanitizer::sanitizeString($this->request->getPost('isButton')) == 'Yes' ? 'Yes' : 'No';
         $pageContent    = InputSanitizer::sanitizeHtml($this->request->getPost('template'));
         $metaTitle      = InputSanitizer::sanitizeString($this->request->getPost('metaTitle'));
@@ -463,6 +476,8 @@ class AdminPanel extends BaseController
         $postSlug       = trim($this->request->getPost('postSlug'));
         $postContent    = trim($this->request->getPost('template'));
         $commentStatus  = trim($this->request->getPost('commentStatus'));
+        // ✅ FIX: Ensure commentStatus is valid ENUM value (Enabled/Disabled only)
+        $commentStatus  = ($commentStatus == 'Disabled') ? 'Disabled' : 'Enabled';
         $postStatus     = trim($this->request->getPost('postStatus'));
         $sharePost      = trim($this->request->getPost('sharePost')) == 'Yes' ? 'Yes' : 'No';
         $featuredPost   = trim($this->request->getPost('featuredPost')) == 'Yes' ? 'Yes' : 'No';
@@ -525,8 +540,12 @@ class AdminPanel extends BaseController
         if ($postId != '0') {
             $this->db->table('fw_posts')->where('postId', $postId)->update($dataQry);
         } else {
-            $dataQry['userId']      = $this->app->userId;
-            $dataQry['createdTime'] = date('Y-m-d H:i:s');
+            $dataQry['userId']         = $this->app->userId;
+            $dataQry['createdTime']    = date('Y-m-d H:i:s');
+            $dataQry['commentCount']   = 0; // ✅ FIX: Set default commentCount for new posts
+            $dataQry['likesCount']     = 0; // ✅ FIX: Set default likesCount for new posts
+            $dataQry['viewsCount']     = 0; // ✅ FIX: Set default viewsCount for new posts
+            $dataQry['downloadCount']  = 0; // ✅ FIX: Set default downloadCount for new posts
             $this->db->table('fw_posts')->insert($dataQry);
             $postId = $this->db->insertID();
         }

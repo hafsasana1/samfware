@@ -214,13 +214,6 @@ $modifiedDate = $post->modifiedTime ?? $publishDate;
         "description": "Official firmware for Samsung <?= $post->device ?> model <?= $post->model ?>"
       },
       "articleSection": "Firmware Downloads",
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.5",
-        "ratingCount": "<?= max(100, intval($post->downloadCount ?? 0) + 129) ?>",
-        "bestRating": "5",
-        "worstRating": "1"
-      },
       "interactionStatistic": {
         "@type": "InteractionCounter",
         "interactionType": "https://schema.org/DownloadAction",

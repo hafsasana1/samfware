@@ -202,6 +202,7 @@ $routes->post('contact-us', 'LandingPages::contactUs');
 // Firmware Scraper (NEW)
 // ------------------------------------------------------------
 $routes->get('firmware-scraper/test',            'FirmwareScraper::test');
+$routes->get('firmware-scraper/test-odinrom',    'FirmwareScraper::testOdinrom');
 $routes->get('firmware-scraper/scrape',          'FirmwareScraper::scrape');
 $routes->get('firmware-scraper/logs',            'FirmwareScraper::logs');
 $routes->get('firmware-scraper/clear-cache',     'FirmwareScraper::clearCache');

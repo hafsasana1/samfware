@@ -188,7 +188,7 @@ class HomeModel extends Model
         $postSearch = $session->get('postSearch');
 
         // ✅ FIX: Use Model-based pagination, not query builder pagination
-        $this->orderBy('modifiedTime', 'desc');
+        $this->select('*, COALESCE(publishedAt, modifiedTime) as sortTime')->orderBy('sortTime', 'desc');
 
         if ($session->has('postSearch')) {
             if ($postSearch['searchIn'] != '') {
@@ -224,7 +224,7 @@ class HomeModel extends Model
 
     public function getRecentPostsOld(int|string $limit = '', int|string $record = ''): array|int
     {
-        $builder = $this->db->table('fw_posts')->select('*')->orderBy('modifiedTime', 'desc');
+        $builder = $this->db->table('fw_posts')->select('*, COALESCE(publishedAt, modifiedTime) as sortTime')->orderBy('sortTime', 'desc');
 
         if ($limit === '') {
             return $builder->get()->getNumRows();
@@ -245,7 +245,7 @@ class HomeModel extends Model
         $builder = $this->db->table('fw_posts')
                             ->select('*')
                             ->where('postStatus', 'Active') // ✅ SECURITY FIX: Only show Active posts
-                            ->orderBy('modifiedTime', 'desc');
+                            ->select('COALESCE(publishedAt, modifiedTime) as sortTime')->orderBy('sortTime', 'desc');
 
         if ($request->getGet('bit') != '') {
             $builder->where('bit', $request->getGet('bit'));
@@ -272,7 +272,7 @@ class HomeModel extends Model
         return $this->db->table('fw_posts')
                        ->select('*')
                        ->where('postStatus', 'Active')
-                       ->orderBy('modifiedTime', 'desc')
+                       ->select('COALESCE(publishedAt, modifiedTime) as sortTime')->orderBy('sortTime', 'desc')
                        ->limit($perPage, $offset)
                        ->get()
                        ->getResult();
@@ -332,7 +332,7 @@ class HomeModel extends Model
         $builder = $this->db->table('fw_posts')
                             ->select('*')
                             ->like('category', $category)
-                            ->orderBy('modifiedTime', 'desc');
+                            ->select('COALESCE(publishedAt, modifiedTime) as sortTime')->orderBy('sortTime', 'desc');
 
         if ($limit === '') {
             return $builder->get()->getNumRows();
@@ -348,7 +348,7 @@ class HomeModel extends Model
 
         $csc = ($uri->getTotalSegments() >= 3) ? trim($uri->getSegment(3)) : '';
 
-        $builder = $this->db->table('fw_posts')->select('*')->where('model', $model);
+        $builder = $this->db->table('fw_posts')->select('*, COALESCE(publishedAt, modifiedTime) as sortTime')->where('model', $model);
 
         if ($csc !== '' && $csc !== null) {
             $builder->groupStart();
@@ -369,7 +369,7 @@ class HomeModel extends Model
             $builder->groupEnd();
         }
 
-        $builder->orderBy('modifiedTime', 'desc');
+        $builder->orderBy('sortTime', 'desc');
 
         if ($limit === '') {
             return $builder->get()->getNumRows();
@@ -382,7 +382,7 @@ class HomeModel extends Model
     public function getModelPosts(string $model, string $csc = '', int|string $limit = '', int|string $record = ''): array|int
     {
         $builder = $this->db->table('fw_posts')
-                            ->select('*')
+                            ->select('*, COALESCE(publishedAt, modifiedTime) as sortTime')
                             ->where('postStatus', 'Active')
                             ->where('model', $model);
 
@@ -394,7 +394,7 @@ class HomeModel extends Model
             $builder->groupEnd();
         }
 
-        $builder->orderBy('modifiedTime', 'desc');
+        $builder->orderBy('sortTime', 'desc');
 
         if ($limit === '') {
             return $builder->get()->getNumRows();

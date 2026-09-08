@@ -123,7 +123,7 @@ class Filters extends BaseFilters
                 'app-admin/deletePage',
                 'app-admin/savePost',
                 'app-admin/deletePost',
-                'app-admin/saveBlogPost',
+                //'app-admin/saveBlogPost',
                 'app-admin/deleteBlogPost',
                 'app-admin/approveComment',
                 'app-admin/postComment',

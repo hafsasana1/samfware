@@ -40,14 +40,21 @@ class FirmwareScraper extends BaseController
     protected $db;
     protected $cacheTime = 3600; // 1 hour cache
     protected $sources = [
-        'sxrom' => [
-            'name' => 'SXRom',
-            'url' => 'https://www.sxrom.com/',
+        'odinrom' => [
+            'name' => 'OdinRom',
+            'url' => 'https://www.odinrom.com/',
             'priority' => 1,
             'enabled' => true,
         ],
-        // SamMobile scraper disabled - using only SXRom.com
+        // SXRom disabled - switched to OdinRom for global coverage
+        // SamMobile scraper disabled - using only OdinRom.com
         /*
+        'sxrom' => [
+            'name' => 'SXRom',
+            'url' => 'https://www.sxrom.com/',
+            'priority' => 2,
+            'enabled' => false,
+        ],
         'sammobile' => [
             'name' => 'SamMobile',
             'url' => 'https://sammobile.com/firmwares/',
@@ -193,6 +200,7 @@ class FirmwareScraper extends BaseController
     private function parseSource(string $sourceKey, string $html): array
     {
         return match ($sourceKey) {
+            'odinrom' => $this->parseOdinRom($html),
             'sxrom' => $this->parseSXRom($html),
             // 'sammobile' => $this->parseSamMobile($html), // DISABLED
             default => [],
@@ -200,7 +208,95 @@ class FirmwareScraper extends BaseController
     }
 
     // ========================================================================
-    // PARSE SXROM.COM
+    // PARSE ODINROM.COM (NEW - Global coverage)
+    // ========================================================================
+
+    private function parseOdinRom(string $html): array
+    {
+        $firmwares = [];
+
+        try {
+            $doc = new \DOMDocument();
+            @$doc->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+            $xpath = new \DOMXPath($doc);
+
+            // Find all tablist-row divs (OdinRom uses custom tablist structure)
+            $rows = $xpath->query("//div[contains(@class, 'tablist-row')]");
+            
+            $this->logMessage('info', "OdinRom: Found {$rows->length} firmware rows");
+            
+            foreach ($rows as $rowIndex => $row) {
+                try {
+                    // Get all columns in this row
+                    $cols = [];
+                    $colDivs = $row->getElementsByTagName('div');
+                    
+                    foreach ($colDivs as $colDiv) {
+                        if ($colDiv->getAttribute('class') === 'tablist-col') {
+                            $cols[] = trim($colDiv->textContent);
+                        }
+                    }
+                    
+                    // Need at least 7 columns: Device, Model, Region, AP, CSC, OS, Date
+                    if (count($cols) < 7) {
+                        continue;
+                    }
+                    
+                    $deviceName = $cols[0];
+                    $model = $cols[1];
+                    $csc = $cols[2];
+                    $pdaVersion = $cols[3];
+                    $cscVersion = $cols[4];
+                    $androidVersion = $cols[5];
+                    $date = $cols[6];
+
+                    // Skip header rows
+                    if (empty($model) || $model === 'Model' || empty($deviceName) || $deviceName === 'Device') {
+                        continue;
+                    }
+
+                    // Skip invalid models
+                    if (strlen($model) < 5 || !str_starts_with($model, 'SM-')) {
+                        $this->logMessage('debug', "Skipping invalid model: {$model}");
+                        continue;
+                    }
+
+                    // Clean device name
+                    $cleanDevice = str_replace('Galaxy ', '', $deviceName);
+                    $device = strtoupper(str_replace([' ', '-'], ' ', $cleanDevice));
+
+                    $firmwares[] = [
+                        'deviceName' => $deviceName,
+                        'device' => $device,
+                        'model' => $model,
+                        'csc' => $csc,
+                        'country' => '', // Will be populated later
+                        'pdaVersion' => $pdaVersion,
+                        'cscVersion' => $cscVersion,
+                        'androidVersion' => $androidVersion,
+                        'releaseDate' => $date,
+                        'source' => 'odinrom',
+                    ];
+
+                    $this->logMessage('debug', "Parsed: {$device} {$model} {$csc} {$pdaVersion}");
+
+                } catch (\Exception $e) {
+                    $this->logMessage('error', "Error parsing OdinRom row {$rowIndex}: " . $e->getMessage());
+                    continue;
+                }
+            }
+
+            $this->logMessage('info', "OdinRom: Successfully parsed " . count($firmwares) . " firmwares");
+
+        } catch (\Exception $e) {
+            $this->logMessage('error', 'OdinRom parse error: ' . $e->getMessage());
+        }
+
+        return $firmwares;
+    }
+
+    // ========================================================================
+    // PARSE SXROM.COM (LEGACY - Chinese regions only)
     // ========================================================================
 
     private function parseSXRom(string $html): array
@@ -519,6 +615,71 @@ class FirmwareScraper extends BaseController
         }
     }
 
+    /**
+     * Fetch file size from OdinRom detail page
+     */
+    private function fetchFileSizeFromOdinRom(string $detailUrl): string
+    {
+        try {
+            $cacheKey = 'odinrom_detail_' . md5($detailUrl);
+            $cacheData = $this->getCache($cacheKey);
+
+            if ($cacheData) {
+                $html = $cacheData;
+            } else {
+                // Use cURL for better reliability
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, $detailUrl);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+                
+                $html = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($html === false || $httpCode !== 200) {
+                    $this->logMessage('warning', "Failed to fetch {$detailUrl} - HTTP {$httpCode}");
+                    return '';
+                }
+                
+                $this->setCache($cacheKey, $html, 3600); // Cache for 1 hour
+            }
+
+            // Parse HTML to find file size from OdinRom
+            // OdinRom structure: <div class="label">Size</div><div class="value">10.2 GB</div>
+            
+            // Method 1: Specific pattern for OdinRom's div structure (most reliable)
+            if (preg_match('/<div class="value">([0-9.]+\s+[GMK]B)<\/div>/i', $html, $matches)) {
+                return $matches[1]; // Already formatted (e.g., "10.2 GB")
+            }
+            
+            // Method 2: Look for "Size" label followed by value div
+            if (preg_match('/<div class="label">Size<\/div>\s*<div class="value">([0-9.]+\s+[GMK]B)<\/div>/i', $html, $matches)) {
+                return $matches[1];
+            }
+            
+            // Method 3: Fallback - general pattern for "Size: X.X GB" format
+            if (preg_match('/(?:File Size|Size|Firmware Size)[:\s]*([0-9.]+)\s*([GMK]B)/i', $html, $matches)) {
+                return $matches[1] . ' ' . strtoupper($matches[2]);
+            }
+            
+            // Method 4: Last resort - any number followed by GB/MB
+            if (preg_match('/([0-9.]+)\s*([GMK]B)/i', $html, $matches)) {
+                return $matches[1] . ' ' . strtoupper($matches[2]);
+            }
+
+            $this->logMessage('debug', "No file size found in {$detailUrl}");
+            return '';
+
+        } catch (\Exception $e) {
+            $this->logMessage('warning', "Error fetching file size from {$detailUrl}: " . $e->getMessage());
+            return '';
+        }
+    }
+
     // ========================================================================
     // GENERATE CSC VERSION
     // ========================================================================
@@ -559,6 +720,12 @@ class FirmwareScraper extends BaseController
         $updated = 0;
         $skipped = 0;
 
+        // Add batch processing to prevent MySQL overload
+        $batchSize = 5; // Process 5 at a time
+        $batchDelay = 500000; // 0.5 second delay between batches (microseconds)
+        
+        $this->logMessage('info', "Processing {$scraped} firmwares in batches of {$batchSize}...");
+
         $autoData = getSiteMeta('postAutomation');
         $cscList = getCSCList();
         
@@ -577,8 +744,16 @@ class FirmwareScraper extends BaseController
             // Scheduler not installed, continue without it
         }
 
+        $processedCount = 0;
         foreach ($firmwareData as $firmware) {
             try {
+                // Add batch delay every N items
+                if ($processedCount > 0 && $processedCount % $batchSize === 0) {
+                    $this->logMessage('debug', "Batch delay: processed {$processedCount}/{$scraped}");
+                    usleep($batchDelay);
+                }
+                $processedCount++;
+                
                 // Skip invalid entries or UNKNOWN devices
                 if (empty($firmware['model']) || 
                     $firmware['model'] === 'Model' || 
@@ -611,18 +786,41 @@ class FirmwareScraper extends BaseController
                 // 2. Extracted from specific pattern if position -5 is a letter
                 $bit = $this->extractBinaryVersion($firmware['pdaVersion']);
 
-                // Fetch file size from SXRom detail page (if available)
+                // Fetch file size and download link from OdinRom detail page
                 $fileSize = '';
+                $downloadLink = '';
+                
+                if ($source === 'odinrom') {
+                    // OdinRom detail URL format
+                    $detailUrl = "https://www.odinrom.com/download/{$firmware['model']}-{$firmware['csc']}-{$firmware['pdaVersion']}-{$firmware['cscVersion']}.html";
+                    
+                    // Fetch file size from detail page
+                    $fileSize = $this->fetchFileSizeFromOdinRom($detailUrl);
+                    if (!empty($fileSize)) {
+                        $this->logMessage('info', "Fetched file size for {$firmware['model']}: {$fileSize}");
+                    }
+                    
+                    // Fetch download link
+                    $downloadLink = $this->fetchOdinRomDownloadLink(
+                        $firmware['model'],
+                        $firmware['csc'],
+                        $firmware['pdaVersion'],
+                        $firmware['cscVersion']
+                    );
+                    
+                    if (!empty($downloadLink)) {
+                        $this->logMessage('info', "Fetched download link for {$firmware['model']}-{$firmware['csc']}");
+                    }
+                }
+                
+                // Legacy: Fetch from SXRom if still using it
                 if ($source === 'sxrom' && !empty($firmware['detailUrl'])) {
                     $fileSize = $this->fetchFileSizeFromDetail($firmware['detailUrl']);
                     if (!empty($fileSize)) {
                         $this->logMessage('info', "Fetched file size for {$firmware['model']}: {$fileSize}");
                     }
-                }
-
-                // Try to fetch download link from OdinRom (safe matching)
-                $downloadLink = '';
-                if ($source === 'sxrom') {
+                    
+                    // Try to fetch download link from OdinRom (safe matching)
                     $downloadLink = $this->fetchOdinRomDownloadLink(
                         $firmware['model'],
                         $firmware['csc'],
@@ -648,6 +846,7 @@ class FirmwareScraper extends BaseController
 
                 // Prepare post data
                 $postData = [
+                    'userId' => 1, // ✅ FIX: Set default userId for scraped posts
                     'postTitle' => $autoData['title'] ?? 'Firmware {device} {version}',
                     'postContent' => $autoData['template'] ?? '',
                     'metaTitle' => $autoData['metaTitle'] ?? '',
@@ -1043,6 +1242,367 @@ class FirmwareScraper extends BaseController
         } catch (\Exception $e) {
             echo "<p style='color:red;'>❌ Error: " . $e->getMessage() . "</p>";
         }
+    }
+
+    /**
+     * Test OdinRom parser before implementation
+     * URL: /firmware-scraper/test-odinrom
+     */
+    public function testOdinrom(): void
+    {
+        // Disable any output buffering that might interfere
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        
+        echo "<h1>OdinRom Parser Test</h1>";
+        echo "<p>Testing OdinRom.com scraping before implementation...</p>";
+        echo "<hr>";
+        flush();
+
+        try {
+            // Fetch OdinRom homepage
+            echo "<h2>Step 1: Fetching OdinRom.com</h2>";
+            flush();
+            
+            $html = $this->fetchPage('https://www.odinrom.com/', 'odinrom');
+            
+            if (!$html) {
+                echo "<p style='color:red;'>❌ Failed to fetch OdinRom.com</p>";
+                return;
+            }
+
+            echo "<p style='color:green;'>✅ Successfully fetched (" . number_format(strlen($html)) . " bytes)</p>";
+            echo "<hr>";
+            flush();
+            
+            // Debug: Show table structure
+            echo "<h3>Debug: Table Structure Analysis</h3>";
+            $doc = new \DOMDocument();
+            @$doc->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+            $xpath = new \DOMXPath($doc);
+            
+            $tables = $xpath->query("//table");
+            echo "<p>Tables found: " . $tables->length . "</p>";
+            
+            if ($tables->length > 0) {
+                $table = $tables->item(0);
+                $rows = $table->getElementsByTagName('tr');
+                echo "<p>Rows in first table: " . $rows->length . "</p>";
+                
+                if ($rows->length > 0) {
+                    echo "<h4>First 3 rows structure:</h4>";
+                    for ($i = 0; $i < min(3, $rows->length); $i++) {
+                        $row = $rows->item($i);
+                        $cells = $row->getElementsByTagName('td');
+                        $headers = $row->getElementsByTagName('th');
+                        
+                        echo "<p><strong>Row {$i}:</strong> ";
+                        echo "TD cells: " . $cells->length . ", TH cells: " . $headers->length . "</p>";
+                        
+                        if ($cells->length > 0) {
+                            echo "<pre>";
+                            for ($j = 0; $j < $cells->length; $j++) {
+                                echo "Cell {$j}: " . htmlspecialchars(trim($cells->item($j)->textContent)) . "\n";
+                            }
+                            echo "</pre>";
+                        }
+                        
+                        if ($headers->length > 0) {
+                            echo "<pre>";
+                            for ($j = 0; $j < $headers->length; $j++) {
+                                echo "Header {$j}: " . htmlspecialchars(trim($headers->item($j)->textContent)) . "\n";
+                            }
+                            echo "</pre>";
+                        }
+                    }
+                }
+            } else {
+                // Try to find div-based tables or lists
+                echo "<p>No &lt;table&gt; tag found. Checking for alternative structures...</p>";
+                
+                $divTables = $xpath->query("//div[contains(@class, 'table')]");
+                echo "<p>Divs with 'table' class: " . $divTables->length . "</p>";
+                
+                $lists = $xpath->query("//ul | //ol");
+                echo "<p>Lists found: " . $lists->length . "</p>";
+            }
+            
+            echo "<hr>";
+
+            // Parse using test parser
+            echo "<h2>Step 2: Parsing Firmware Data</h2>";
+            $firmwares = $this->parseOdinRomTest($html);
+            
+            echo "<p><strong>Total firmware entries parsed: " . count($firmwares) . "</strong></p>";
+            echo "<hr>";
+
+            if (empty($firmwares)) {
+                echo "<p style='color:red;'>❌ No firmware data found!</p>";
+                echo "<h3>HTML Sample (first 3000 chars):</h3>";
+                echo "<pre>" . htmlspecialchars(substr($html, 0, 3000)) . "</pre>";
+                
+                echo "<h3>Searching for firmware patterns:</h3>";
+                $doc = new \DOMDocument();
+                @$doc->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+                $xpath = new \DOMXPath($doc);
+                
+                // Look for common firmware identifiers
+                echo "<p>Searching for 'SM-' pattern: ";
+                if (preg_match_all('/SM-[A-Z0-9]+/', $html, $matches)) {
+                    echo count($matches[0]) . " found</p>";
+                    echo "<pre>" . print_r(array_slice($matches[0], 0, 10), true) . "</pre>";
+                } else {
+                    echo "None found</p>";
+                }
+                
+                echo "<p>Searching for firmware divs/sections:</p>";
+                $firmwareDivs = $xpath->query("//div[contains(@class, 'firmware') or contains(@class, 'rom') or contains(@class, 'download')]");
+                echo "<p>Firmware-related divs: " . $firmwareDivs->length . "</p>";
+                
+                // Look for firmware-item, card, or row structures
+                $allDivs = $xpath->query("//div[contains(@class, 'item') or contains(@class, 'card') or contains(@class, 'row') or contains(@class, 'list')]");
+                echo "<p>Item/card/row divs: " . $allDivs->length . "</p>";
+                
+                if ($allDivs->length > 0) {
+                    echo "<h4>First item div classes:</h4>";
+                    for ($i = 0; $i < min(3, $allDivs->length); $i++) {
+                        $div = $allDivs->item($i);
+                        $class = $div->getAttribute('class');
+                        echo "<p>Div {$i}: class='{$class}'</p>";
+                        echo "<pre>" . htmlspecialchars(substr($div->textContent, 0, 300)) . "</pre>";
+                    }
+                }
+                
+                // Look for anchor tags with models
+                echo "<h4>Searching for links with SM- models:</h4>";
+                $links = $xpath->query("//a[contains(text(), 'SM-')]");
+                echo "<p>Links with SM- models: " . $links->length . "</p>";
+                
+                if ($links->length > 0) {
+                    echo "<h5>First 5 firmware links:</h5>";
+                    echo "<table border='1' cellpadding='5'>";
+                    echo "<tr><th>#</th><th>Text</th><th>Href</th></tr>";
+                    for ($i = 0; $i < min(5, $links->length); $i++) {
+                        $link = $links->item($i);
+                        echo "<tr>";
+                        echo "<td>" . ($i+1) . "</td>";
+                        echo "<td>" . htmlspecialchars($link->textContent) . "</td>";
+                        echo "<td>" . htmlspecialchars($link->getAttribute('href')) . "</td>";
+                        echo "</tr>";
+                    }
+                    echo "</table>";
+                    
+                    // Analyze parent structure
+                    echo "<h5>Full row structure analysis:</h5>";
+                    $firstLink = $links->item(0);
+                    
+                    // Find the row container (parent of all columns)
+                    $col = $firstLink->parentNode; // tablist-col
+                    $row = $col->parentNode; // should be tablist-row
+                    
+                    echo "<p>Column parent: " . $col->nodeName . " (class: " . $col->getAttribute('class') . ")</p>";
+                    echo "<p>Row parent: " . $row->nodeName . " (class: " . $row->getAttribute('class') . ")</p>";
+                    
+                    // Get all columns in this row
+                    $allCols = $row->getElementsByTagName('div');
+                    echo "<p>Columns in row: " . $allCols->length . "</p>";
+                    
+                    echo "<h5>All columns in first firmware row:</h5>";
+                    echo "<table border='1' cellpadding='5'>";
+                    echo "<tr><th>Col#</th><th>Class</th><th>Content</th></tr>";
+                    
+                    $colIndex = 0;
+                    foreach ($allCols as $c) {
+                        if ($c->getAttribute('class') === 'tablist-col') {
+                            echo "<tr>";
+                            echo "<td>" . $colIndex . "</td>";
+                            echo "<td>tablist-col</td>";
+                            echo "<td>" . htmlspecialchars(trim($c->textContent)) . "</td>";
+                            echo "</tr>";
+                            $colIndex++;
+                        }
+                    }
+                    echo "</table>";
+                    
+                    // Now find all rows
+                    echo "<h5>Finding all firmware rows:</h5>";
+                    $allRows = $xpath->query("//div[contains(@class, 'tablist-row')]");
+                    echo "<p>Total tablist-row divs: " . $allRows->length . "</p>";
+                }
+                
+                return;
+            }
+
+            // Display sample data
+            echo "<h2>Step 3: Sample Data (First 5 Entries)</h2>";
+            echo "<table border='1' cellpadding='8' cellspacing='0' style='border-collapse: collapse; width: 100%;'>";
+            echo "<tr style='background: #4CAF50; color: white;'>";
+            echo "<th>#</th><th>Device</th><th>Model</th><th>CSC</th><th>PDA</th><th>CSC Ver</th><th>Android</th><th>Date</th></tr>";
+            
+            foreach (array_slice($firmwares, 0, 5) as $i => $fw) {
+                echo "<tr>";
+                echo "<td>" . ($i+1) . "</td>";
+                echo "<td>" . htmlspecialchars($fw['deviceName']) . "</td>";
+                echo "<td><strong>" . htmlspecialchars($fw['model']) . "</strong></td>";
+                echo "<td>" . htmlspecialchars($fw['csc']) . "</td>";
+                echo "<td>" . htmlspecialchars($fw['pdaVersion']) . "</td>";
+                echo "<td>" . htmlspecialchars($fw['cscVersion']) . "</td>";
+                echo "<td>" . htmlspecialchars($fw['androidVersion']) . "</td>";
+                echo "<td>" . htmlspecialchars($fw['releaseDate']) . "</td>";
+                echo "</tr>";
+            }
+            echo "</table>";
+            echo "<hr>";
+
+            // Region analysis
+            echo "<h2>Step 4: Region Coverage</h2>";
+            $regions = [];
+            foreach ($firmwares as $fw) {
+                $regions[$fw['csc']] = ($regions[$fw['csc']] ?? 0) + 1;
+            }
+            
+            echo "<p><strong>Unique regions found: " . count($regions) . "</strong></p>";
+            echo "<p>Regions: " . implode(', ', array_keys($regions)) . "</p>";
+            
+            $globalRegions = ['XAA', 'TMB', 'VZW', 'ATT', 'EUR', 'DBT', 'BTU', 'TGY', 'CHC', 'CCT'];
+            $foundGlobal = array_intersect($globalRegions, array_keys($regions));
+            
+            if (!empty($foundGlobal)) {
+                echo "<p style='color:green; font-weight:bold;'>✅ GLOBAL COVERAGE CONFIRMED!</p>";
+                echo "<p>Found " . count($foundGlobal) . " major global regions: " . implode(', ', $foundGlobal) . "</p>";
+            }
+            echo "<hr>";
+
+            // Test download link
+            echo "<h2>Step 5: Download Link Test</h2>";
+            $testFw = $firmwares[0];
+            $detailUrl = $testFw['detailUrl'];
+            echo "<p>Testing: <a href='{$detailUrl}' target='_blank'>{$detailUrl}</a></p>";
+            
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $detailUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_NOBODY, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0');
+            curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode === 200) {
+                echo "<p style='color:green;'>✅ Detail page exists (HTTP {$httpCode})</p>";
+            } else {
+                echo "<p style='color:orange;'>⚠️ HTTP {$httpCode}</p>";
+            }
+            echo "<hr>";
+
+            // Final verdict
+            echo "<h2>Final Verdict</h2>";
+            if (count($firmwares) > 5 && count($regions) > 3) {
+                echo "<div style='background: #4CAF50; color: white; padding: 20px;'>";
+                echo "<h3>✅ TEST PASSED!</h3>";
+                echo "<p>OdinRom parser is working correctly!</p>";
+                echo "<ul>";
+                echo "<li>✅ Parsed " . count($firmwares) . " firmware entries</li>";
+                echo "<li>✅ Found " . count($regions) . " regions</li>";
+                if (!empty($foundGlobal)) {
+                    echo "<li>✅ Global coverage: " . count($foundGlobal) . " major regions</li>";
+                }
+                echo "</ul>";
+                echo "<p><strong>READY FOR IMPLEMENTATION!</strong></p>";
+                echo "</div>";
+            } else {
+                echo "<div style='background: #f44336; color: white; padding: 20px;'>";
+                echo "<h3>❌ TEST FAILED</h3>";
+                echo "<p>Parser needs adjustment</p>";
+                echo "</div>";
+            }
+
+        } catch (\Exception $e) {
+            echo "<p style='color:red;'>❌ Error: " . $e->getMessage() . "</p>";
+            echo "<pre>" . $e->getTraceAsString() . "</pre>";
+        }
+    }
+
+    /**
+     * Test parser for OdinRom (updated for tablist structure)
+     */
+    private function parseOdinRomTest(string $html): array
+    {
+        $firmwares = [];
+
+        try {
+            $doc = new \DOMDocument();
+            @$doc->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+            $xpath = new \DOMXPath($doc);
+
+            // Find all tablist-row divs
+            $rows = $xpath->query("//div[contains(@class, 'tablist-row')]");
+            
+            foreach ($rows as $row) {
+                try {
+                    // Get all columns in this row
+                    $cols = [];
+                    $colDivs = $row->getElementsByTagName('div');
+                    
+                    foreach ($colDivs as $colDiv) {
+                        if ($colDiv->getAttribute('class') === 'tablist-col') {
+                            $cols[] = trim($colDiv->textContent);
+                        }
+                    }
+                    
+                    // Need at least 7 columns (Device, Model, Region, AP, CSC, OS, Date)
+                    if (count($cols) < 7) {
+                        continue;
+                    }
+                    
+                    $deviceName = $cols[0];
+                    $model = $cols[1];
+                    $csc = $cols[2];
+                    $pdaVersion = $cols[3];
+                    $cscVersion = $cols[4];
+                    $androidVersion = $cols[5];
+                    $date = $cols[6];
+
+                    // Skip header rows
+                    if (empty($model) || $model === 'Model' || empty($deviceName) || $deviceName === 'Device') {
+                        continue;
+                    }
+
+                    // Skip invalid models
+                    if (strlen($model) < 5 || !str_starts_with($model, 'SM-')) {
+                        continue;
+                    }
+
+                    $cleanDevice = str_replace('Galaxy ', '', $deviceName);
+                    $device = strtoupper(str_replace([' ', '-'], ' ', $cleanDevice));
+
+                    $firmwares[] = [
+                        'deviceName' => $deviceName,
+                        'device' => $device,
+                        'model' => $model,
+                        'csc' => $csc,
+                        'country' => '',
+                        'pdaVersion' => $pdaVersion,
+                        'cscVersion' => $cscVersion,
+                        'androidVersion' => $androidVersion,
+                        'releaseDate' => $date,
+                        'source' => 'odinrom',
+                        'detailUrl' => "https://www.odinrom.com/download/{$model}-{$csc}-{$pdaVersion}-{$cscVersion}.html",
+                    ];
+
+                } catch (\Exception $e) {
+                    continue;
+                }
+            }
+
+        } catch (\Exception $e) {
+            // Silent fail
+        }
+
+        return $firmwares;
     }
 
     /**

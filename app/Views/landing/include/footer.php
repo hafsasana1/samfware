@@ -62,7 +62,7 @@ if (!isset($webLogo)) {
                         </div>
                         
                         <!-- Condensed Professional Text (No Heading) -->
-                        <p class="text-sm text-gray-400 leading-relaxed">
+                        <p class="text-sm text-gray-400 leading-relaxed" data-nosnippet>
                             Download official Samsung firmware for all Galaxy devices. 
                             15,000+ verified ROMs. Free, fast, no registration. 
                             Installation guides included.
