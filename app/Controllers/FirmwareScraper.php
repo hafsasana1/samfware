@@ -617,6 +617,7 @@ class FirmwareScraper extends BaseController
 
     /**
      * Fetch file size from OdinRom detail page
+     * Enhanced with retry logic and better timeout handling
      */
     private function fetchFileSizeFromOdinRom(string $detailUrl): string
     {
@@ -627,21 +628,36 @@ class FirmwareScraper extends BaseController
             if ($cacheData) {
                 $html = $cacheData;
             } else {
-                // Use cURL for better reliability
-                $ch = curl_init();
-                curl_setopt($ch, CURLOPT_URL, $detailUrl);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+                // Use cURL with retry logic for better reliability
+                $maxRetries = 3;
+                $html = false;
                 
-                $html = curl_exec($ch);
-                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
+                for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                    $ch = curl_init();
+                    curl_setopt($ch, CURLOPT_URL, $detailUrl);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 15); // Increased from 10 to 15 seconds
+                    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+                    
+                    $html = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($html !== false && $httpCode === 200) {
+                        break; // Success, exit retry loop
+                    }
+                    
+                    if ($attempt < $maxRetries) {
+                        $this->logMessage('warning', "Retry {$attempt}/{$maxRetries} for {$detailUrl} - HTTP {$httpCode}");
+                        usleep(500000); // Wait 0.5 second before retry
+                    }
+                }
 
                 if ($html === false || $httpCode !== 200) {
-                    $this->logMessage('warning', "Failed to fetch {$detailUrl} - HTTP {$httpCode}");
+                    $this->logMessage('warning', "Failed to fetch {$detailUrl} after {$maxRetries} attempts - HTTP {$httpCode}");
                     return '';
                 }
                 
